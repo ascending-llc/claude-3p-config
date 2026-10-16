@@ -5,7 +5,7 @@
 set -euo pipefail
 umask 077
 
-profile_name="ASCENDING-CCWB"
+profile_name="CCWB"
 aws_region="__BEDROCK_REGION__"
 package_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 employee_home="${HOME:-}"

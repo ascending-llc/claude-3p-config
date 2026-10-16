@@ -1,6 +1,6 @@
 {
   "profiles": {
-    "ASCENDING-CCWB": {
+    "CCWB": {
       "auth_type": "idc",
       "sso_enabled": false,
       "aws_region": "REPLACE_WITH_BEDROCK_REGION",

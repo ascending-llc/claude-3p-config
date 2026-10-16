@@ -21,7 +21,7 @@ SPEC.loader.exec_module(MODULE)
 def valid_config(region="eu-west-1"):
     return {
         "profiles": {
-            "ASCENDING-CCWB": {
+            "CCWB": {
                 "auth_type": "idc",
                 "sso_enabled": False,
                 "aws_region": region,
@@ -79,8 +79,8 @@ class EmployeeDistTests(unittest.TestCase):
         self.assertEqual({p.name for p in output.iterdir()}, {"macos", "windows"})
         macos_readme = (output / "macos" / "README-macOS.md").read_text(encoding="utf-8")
         windows_readme = (output / "windows" / "README-Windows.md").read_text(encoding="utf-8")
-        self.assertIn("--logout --profile ASCENDING-CCWB", macos_readme)
-        self.assertIn("--logout --profile ASCENDING-CCWB", windows_readme)
+        self.assertIn("--logout --profile CCWB", macos_readme)
+        self.assertIn("--logout --profile CCWB", windows_readme)
         self.assertEqual({p.name for p in (output / "macos").iterdir()}, {
             "install.sh", "README-macOS.md", "config.json", "Claude-CCWB.mobileconfig",
             "credential-process-darwin-arm64", "credential-process-darwin-amd64",
@@ -92,13 +92,20 @@ class EmployeeDistTests(unittest.TestCase):
         runtime = json.loads((output / "macos" / "config.json").read_text())
         self.assertEqual(runtime, {"profiles": valid_config()["profiles"]})
         self.assertEqual((output / "macos" / "config.json").read_bytes(), (output / "windows" / "config.json").read_bytes())
-        self.assertIn('aws_region="eu-west-1"', (output / "macos" / "install.sh").read_text())
-        self.assertIn("$awsRegion = 'eu-west-1'", (output / "windows" / "install.ps1").read_text(encoding="utf-8-sig"))
+        macos_install = (output / "macos" / "install.sh").read_text()
+        windows_install = (output / "windows" / "install.ps1").read_text(encoding="utf-8-sig")
+        self.assertIn('aws_region="eu-west-1"', macos_install)
+        self.assertIn('profile_name="CCWB"', macos_install)
+        self.assertIn("$awsRegion = 'eu-west-1'", windows_install)
+        self.assertIn("$profileName = 'CCWB'", windows_install)
         self.assertTrue((output / "windows" / "install.ps1").read_bytes().startswith(codecs.BOM_UTF8))
         with (output / "macos" / "Claude-CCWB.mobileconfig").open("rb") as stream:
             policy = plistlib.load(stream)
         self.assertEqual(policy["PayloadContent"][0]["inferenceBedrockRegion"], "eu-west-1")
-        self.assertIn('"inferenceBedrockRegion"="eu-west-1"', (output / "windows" / "Claude-CCWB.reg").read_text(encoding="utf-16"))
+        self.assertEqual(policy["PayloadContent"][0]["inferenceBedrockProfile"], "CCWB")
+        reg_text = (output / "windows" / "Claude-CCWB.reg").read_text(encoding="utf-16")
+        self.assertIn('"inferenceBedrockRegion"="eu-west-1"', reg_text)
+        self.assertIn('"inferenceBedrockProfile"="CCWB"', reg_text)
 
     def test_mcp_servers_are_embedded_in_mobileconfig_and_reg(self):
         server = {
@@ -214,7 +221,7 @@ class EmployeeDistTests(unittest.TestCase):
         marker = output / "keep-me"
         marker.write_text("old")
         config = valid_config()
-        config["profiles"]["ASCENDING-CCWB"]["monitoring_enabled"] = True
+        config["profiles"]["CCWB"]["monitoring_enabled"] = True
         self.write_config(config)
         with self.assertRaises(ValueError):
             self.build()

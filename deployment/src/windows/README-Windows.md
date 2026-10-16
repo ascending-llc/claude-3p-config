@@ -6,7 +6,7 @@ This directory connects Claude Desktop on your Windows computer to models provid
 
 | File | Purpose |
 | --- | --- |
-| `install.ps1` | Installs the program and `config.json`, and adds only the current user's `ASCENDING-CCWB` AWS profile. |
+| `install.ps1` | Installs the program and `config.json`, and adds only the current user's `CCWB` AWS profile. |
 | `credential-process-windows-amd64.exe` | This project's credential program for Windows x64. The script installs it as `credential-process.exe`. |
 | `config.json` | Contains the organization's IAM Identity Center entry point, AWS account, permission set, and regions. It does not contain your sign-in token or static keys. |
 | `Claude-CCWB.reg` | Writes the Bedrock, model, and `vendor-profile` settings for Claude Desktop to the current user's `HKCU\SOFTWARE\Policies\Claude`. Do not put this file in the Claude Desktop application folder. |
@@ -39,9 +39,9 @@ If the effective policy is already `RemoteSigned` but the downloaded script is r
 Do not select “Run as administrator.” The script rejects elevation to avoid installing into an administrator's user directory. It reads the `.exe` and `config.json` from its own directory, installs them in `%USERPROFILE%\claude-code-with-bedrock\`, and adds only this separate section to `%USERPROFILE%\.aws\config`. The path below is illustrative; do not copy it manually:
 
 ```ini
-[profile ASCENDING-CCWB]
+[profile CCWB]
 region = __BEDROCK_REGION__
-credential_process = "C:\Users\alice\claude-code-with-bedrock\credential-process.exe" --profile ASCENDING-CCWB
+credential_process = "C:\Users\alice\claude-code-with-bedrock\credential-process.exe" --profile CCWB
 ```
 
 The script checks target files, AWS profiles with the same name, static credentials, and machine-wide Claude policies before writing. It stops on conflicts without overwriting or cleaning them up. If it modifies an existing AWS configuration, it keeps a timestamped backup in the same directory and prints its path; it stops if the original file permissions cannot be preserved. It does not write the registry, sign you in, invoke a model, or change PowerShell execution policy.
@@ -51,7 +51,7 @@ The script checks target files, AWS profiles with the same name, static credenti
 In PowerShell, run:
 
 ```powershell
-& "$env:USERPROFILE\claude-code-with-bedrock\credential-process.exe" --login --profile ASCENDING-CCWB
+& "$env:USERPROFILE\claude-code-with-bedrock\credential-process.exe" --login --profile CCWB
 ```
 
 Follow the terminal instructions to open the authorization page and complete your organization's IAM Identity Center sign-in. If your organization uses Entra ID, federation occurs through the sign-in flow; the bundle does not need your Entra ID secrets. If you cannot see the assigned AWS account or permission set, check your account assignment. Do not borrow a coworker's credentials.
@@ -61,7 +61,7 @@ Follow the terminal instructions to open the authorization page and complete you
 To repeat authorization on this computer, quit Claude Desktop completely and run in PowerShell:
 
 ```powershell
-& "$env:USERPROFILE\claude-code-with-bedrock\credential-process.exe" --logout --profile ASCENDING-CCWB
+& "$env:USERPROFILE\claude-code-with-bedrock\credential-process.exe" --logout --profile CCWB
 ```
 
 This clears only local sign-in and session caches. It does not remove the credential program, `config.json`, AWS profile, or Claude Desktop user policy, and it does not revoke a remote session. Then run the `--login` command above again. The device authorization flow should appear; follow its prompts.
@@ -94,7 +94,7 @@ If the script reports an existing `HKLM\SOFTWARE\Policies\Claude` key, do not im
 
 For rollback, first read the installer's “Added in this run” summary:
 
-- If the AWS profile was added in this run, open `%USERPROFILE%\.aws\config` in a text editor and remove only `[profile ASCENDING-CCWB]` and its `region` and `credential_process` lines. Before restoring a backup, compare it with the current file so you do not overwrite other settings added later.
+- If the AWS profile was added in this run, open `%USERPROFILE%\.aws\config` in a text editor and remove only `[profile CCWB]` and its `region` and `credential_process` lines. Before restoring a backup, compare it with the current file so you do not overwrite other settings added later.
 - If the program or `config.json` was added in this run, remove only that individual file. Do not delete your entire user directory or `%USERPROFILE%\.aws`.
 - For the registry settings imported in this run, export a backup of `HKCU\SOFTWARE\Policies\Claude` first, then remove only the values listed in `Claude-CCWB.reg`. Delete the entire user-level key only if it did not exist before and no other settings have been added since. Do not delete an `HKLM` policy whose ownership you cannot confirm.
 

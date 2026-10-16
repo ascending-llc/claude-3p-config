@@ -1,6 +1,6 @@
 # ASCENDING Employee Bundle Packaging Guide
 
-`config.example/config.json.example` is a redacted template. The real `config/config.json` must come through an organization-approved private channel and is ignored by Git. Do not put tokens, access keys, or personal employee credentials in it. The configuration allows one `ASCENDING-CCWB` IAM Identity Center profile and two AIP models, Sonnet and Haiku. Quota and monitoring features are not supported.
+`config.example/config.json.example` is a redacted template. The real `config/config.json` must come through an organization-approved private channel and is ignored by Git. Do not put tokens, access keys, or personal employee credentials in it. The configuration allows one `CCWB` IAM Identity Center profile and two AIP models, Sonnet and Haiku. Quota and monitoring features are not supported.
 
 The optional `desktop.mcp_servers` list configures remote HTTP MCP servers. Each entry needs `name`, `transport: http`, and an HTTPS `url`. Packaging serializes the list as a JSON string in the `managedMcpServers` key of both the `.mobileconfig` and `.reg` policies.
 

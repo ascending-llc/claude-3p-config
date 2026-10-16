@@ -15,7 +15,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
-PROFILE_NAME = "ASCENDING-CCWB"
+PROFILE_NAME = "CCWB"
 BINARY_NAMES = {
     "macos-arm64": "credential-process-darwin-arm64",
     "macos-intel": "credential-process-darwin-amd64",

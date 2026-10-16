@@ -4,7 +4,7 @@
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
-$profileName = 'ASCENDING-CCWB'
+$profileName = 'CCWB'
 $awsRegion = '__BEDROCK_REGION__'
 $binaryWritten = $false
 $configWritten = $false
