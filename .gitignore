@@ -1,0 +1,7 @@
+.DS_Store
+__pycache__/
+*.py[cod]
+dist/
+/deployment/src/config/
+
+callback.md
