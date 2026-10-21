@@ -1,0 +1,37 @@
+{
+  "aws": {
+    "account_id": "REPLACE_WITH_12_DIGIT_AWS_ACCOUNT_ID",
+    "bedrock_region": "us-east-1",
+    "sso_start_url": "REPLACE_WITH_IAM_IDENTITY_CENTER_START_URL",
+    "sso_region": "us-east-1",
+    "sso_role_name": "REPLACE_WITH_PERMISSION_SET_NAME"
+  },
+  "models": [
+    {
+      "tier": "sonnet",
+      "aip_arn": "REPLACE_WITH_SONNET_AIP_ARN",
+      "anthropic_model_id": "claude-sonnet-5",
+      "label": "Sonnet"
+    },
+    {
+      "tier": "haiku",
+      "aip_arn": "REPLACE_WITH_HAIKU_AIP_ARN",
+      "anthropic_model_id": "claude-haiku-4-5-20251001",
+      "label": "Haiku"
+    }
+  ],
+  "desktop": {
+    "mcp_servers": [
+      {
+        "name": "jarvis-registry",
+        "url": "REPLACE_WITH_MCP_SERVER_URL",
+        "oauth": true
+      }
+    ]
+  },
+  "profile": {
+    "identifier": "com.example.claude.ccwb",
+    "display_name": "Claude on Amazon Bedrock (CCWB)",
+    "organization": "REPLACE_WITH_ORGANIZATION_NAME"
+  }
+}
