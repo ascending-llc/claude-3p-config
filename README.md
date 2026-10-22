@@ -13,7 +13,7 @@ The generator `ccwb-policy` renders all three from one `config/config.json`:
 | Platform | Output | Status |
 | --- | --- | --- |
 | macOS | `dist/macos/Claude-CCWB.mobileconfig`, `dist/macos/aws-config-CCWB.ini` | Tested end to end |
-| Windows | `dist/windows/Claude-CCWB.reg`, `dist/windows/aws-config-CCWB.ini` | Generated, **not yet tested** |
+| Windows | `dist/windows/Claude-CCWB.reg`, `dist/windows/aws-config-CCWB.ini` | Tested end to end |
 
 If you'd rather run a central gateway than configure each machine, the Claude apps gateway is the alternative. It isn't covered here.
 
@@ -30,7 +30,7 @@ Then follow the guide for your platform:
 
 - [Admin guide](docs/admin-guide.md): AWS prerequisites, the config fields, generating and distributing the policies
 - [macOS user guide](docs/macos-user-guide.md): install and sign in on a Mac
-- [Windows user guide](docs/windows-user-guide.md): install and sign in on Windows (untested)
+- [Windows user guide](docs/windows-user-guide.md): install and sign in on Windows
 - [Test plan](docs/test-plan.md): what was tested, and the checklist for new platforms or changes
 
 Without Go, copy the committed examples in [`examples/`](examples/) and replace each `REPLACE_WITH_` value by hand. The examples are rendered from [`config/config.example.json`](config/config.example.json).

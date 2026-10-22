@@ -6,8 +6,8 @@ Run this on each new platform, and again after changing the config schema or the
 
 | Platform | Date | Versions | Result |
 | --- | --- | --- | --- |
-| macOS 26.7.1 | 2026-10-21 | Claude Desktop 2.26454.2, Claude Code 2.1.306, AWS CLI 2.37.12 | All passed, with the administrator permission set. Sonnet and Haiku only: the Opus tier and `default_tier` were added later and are untested |
-| Windows | — | — | Not run |
+| macOS 26.7.1 | 2026-10-21 | Claude Desktop 2.26454.2, Claude Code 2.1.306, AWS CLI 2.37.12 | All passed, with the administrator permission set. Sonnet and Haiku only: the Opus tier and `default_tier` were added later and are untested. D4 passed with automatic client registration; re-run it with the pre-registered client and callback port 47280 |
+| Windows 10 Home 22H2 (19045) | 2026-10-22 | Claude Desktop 3.1623.4 (Microsoft Store), Claude Code 2.1.308, AWS CLI 2.38.4 | All passed, with the administrator permission set and WSL2 installed. Sonnet and Haiku only. D4 failed with automatic client registration (port 53280 reserved by WSL2), then passed with a pre-registered client and callback port 47280 |
 
 ## Before you start
 
@@ -22,7 +22,7 @@ Run this on each new platform, and again after changing the config schema or the
 | D1 | Install the policy, quit and reopen Desktop, sign in with AWS | The device page shows the same code as Desktop; after **Allow**, Desktop is signed in |
 | D2 | Open the model picker | Only the configured models' labels, with the `default_tier` model selected |
 | D3 | Chat with each model | Replies arrive; Bedrock usage of the matching AIP goes up |
-| D4 | **Customize → Connectors**, connect each managed connector | It's listed, OAuth sign-in completes, and its tools work in a chat |
+| D4 | **Customize → Connectors**, connect each managed connector. On Windows, test on a machine with WSL2 or Docker Desktop installed | It's listed, OAuth sign-in completes, and its tools work in a chat. `main.log` has no `dropped` or `listen EACCES` lines for it |
 
 ## Claude Code
 

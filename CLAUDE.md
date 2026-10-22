@@ -14,7 +14,7 @@ A change to the config schema or to any rendered key isn't done until all of the
 
 ## Facts the design depends on
 
-Verified on macOS on 2026-10-21. Windows is generated but untested, so say so wherever Windows behavior is described until it has been tested.
+Verified on macOS on 2026-10-21 and on Windows 10 on 2026-10-22. Note in `docs/test-plan.md` when a change to the schema or the rendered keys hasn't been re-tested on a platform yet.
 
 - Claude Desktop reads the `com.anthropic.claudefordesktop` payload, Claude Code the `com.anthropic.claudecode` payload; both work in one per-user (`PayloadScope` `User`) profile.
 - Claude Code's `availableModels` restricts aliases, not raw model IDs: `--model us.anthropic.…` still reaches Bedrock. Don't describe the allowlist as a security boundary; IAM or an SCP is.

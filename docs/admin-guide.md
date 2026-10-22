@@ -93,7 +93,7 @@ The command validates every field first and lists all problems, each with its fi
 ```
 dist/macos/Claude-CCWB.mobileconfig    one profile, two payloads: Claude Desktop and Claude Code
 dist/macos/aws-config-CCWB.ini         ~/.aws/config snippet
-dist/windows/Claude-CCWB.reg           both policies under HKLM (untested)
+dist/windows/Claude-CCWB.reg           both policies under HKLM
 dist/windows/aws-config-CCWB.ini       same snippet, for %USERPROFILE%\.aws\config
 ```
 
