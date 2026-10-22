@@ -1,0 +1,4 @@
+# .reg files are UTF-16LE with CRLF line endings; Git must not touch them.
+*.reg binary
+*.mobileconfig text eol=lf
+*.ini text eol=lf

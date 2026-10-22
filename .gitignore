@@ -1,7 +1,6 @@
 .DS_Store
-__pycache__/
-*.py[cod]
-dist/
-/deployment/src/config/
+coverage.out
 
-callback.md
+# Generated policies and the real deployment config hold account details.
+/dist/
+/config/config.json

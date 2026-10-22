@@ -1,0 +1,17 @@
+# Build Python hook environments with the project's interpreter (see .python-version)
+# instead of whatever Python pre-commit itself runs on.
+default_language_version:
+  python: python3.14
+
+repos:
+  - repo: https://github.com/golangci/golangci-lint
+    rev: v2.15.0
+    hooks:
+      - id: golangci-lint-config-verify
+      - id: golangci-lint-fmt
+      - id: golangci-lint-full
+
+  - repo: https://github.com/godaddy/tartufo
+    rev: v6.0.0
+    hooks:
+      - id: tartufo

@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>PayloadContent</key>
+	<array>
+		<dict>
+			<key>PayloadDisplayName</key>
+			<string>Claude Desktop</string>
+			<key>PayloadIdentifier</key>
+			<string>com.example.claude.ccwb.desktop</string>
+			<key>PayloadType</key>
+			<string>com.anthropic.claudefordesktop</string>
+			<key>PayloadUUID</key>
+			<string>18C37AF2-743E-878A-8509-3A17868E6FEA</string>
+			<key>PayloadVersion</key>
+			<integer>1</integer>
+			<key>inferenceBedrockRegion</key>
+			<string>us-east-1</string>
+			<key>inferenceBedrockSsoAccountId</key>
+			<string>REPLACE_WITH_12_DIGIT_AWS_ACCOUNT_ID</string>
+			<key>inferenceBedrockSsoRegion</key>
+			<string>us-east-1</string>
+			<key>inferenceBedrockSsoRoleName</key>
+			<string>REPLACE_WITH_PERMISSION_SET_NAME</string>
+			<key>inferenceBedrockSsoStartUrl</key>
+			<string>REPLACE_WITH_IAM_IDENTITY_CENTER_START_URL</string>
+			<key>inferenceCredentialKind</key>
+			<string>interactive</string>
+			<key>inferenceModels</key>
+			<string>[{"name":"REPLACE_WITH_SONNET_AIP_ARN","labelOverride":"Sonnet","anthropicFamilyTier":"sonnet"},{"name":"REPLACE_WITH_OPUS_AIP_ARN","labelOverride":"Opus","anthropicFamilyTier":"opus"},{"name":"REPLACE_WITH_HAIKU_AIP_ARN","labelOverride":"Haiku","anthropicFamilyTier":"haiku"}]</string>
+			<key>inferenceProvider</key>
+			<string>bedrock</string>
+			<key>managedMcpServers</key>
+			<string>[{"oauth":{"clientId":"REPLACE_WITH_OAUTH_CLIENT_ID","scope":"mcp-proxy-ops","callbackPort":47280},"name":"jarvis-registry","transport":"http","url":"REPLACE_WITH_MCP_SERVER_URL"}]</string>
+		</dict>
+		<dict>
+			<key>PayloadDisplayName</key>
+			<string>Claude Code</string>
+			<key>PayloadIdentifier</key>
+			<string>com.example.claude.ccwb.claudecode</string>
+			<key>PayloadType</key>
+			<string>com.anthropic.claudecode</string>
+			<key>PayloadUUID</key>
+			<string>EA121D09-2855-8EC9-BB57-B6291B3C15D9</string>
+			<key>PayloadVersion</key>
+			<integer>1</integer>
+			<key>availableModels</key>
+			<array>
+				<string>opus</string>
+				<string>sonnet</string>
+				<string>haiku</string>
+			</array>
+			<key>awsAuthRefresh</key>
+			<string>aws sso login --profile CCWB</string>
+			<key>enforceAvailableModels</key>
+			<true/>
+			<key>env</key>
+			<dict>
+				<key>ANTHROPIC_DEFAULT_HAIKU_MODEL</key>
+				<string>REPLACE_WITH_HAIKU_AIP_ARN</string>
+				<key>ANTHROPIC_DEFAULT_OPUS_MODEL</key>
+				<string>REPLACE_WITH_OPUS_AIP_ARN</string>
+				<key>ANTHROPIC_DEFAULT_SONNET_MODEL</key>
+				<string>REPLACE_WITH_SONNET_AIP_ARN</string>
+				<key>ANTHROPIC_MODEL</key>
+				<string>REPLACE_WITH_SONNET_AIP_ARN</string>
+				<key>AWS_PROFILE</key>
+				<string>CCWB</string>
+				<key>AWS_REGION</key>
+				<string>us-east-1</string>
+				<key>CLAUDE_CODE_USE_BEDROCK</key>
+				<string>1</string>
+			</dict>
+			<key>modelOverrides</key>
+			<dict>
+				<key>claude-haiku-4-5-20251001</key>
+				<string>REPLACE_WITH_HAIKU_AIP_ARN</string>
+				<key>claude-opus-5-5</key>
+				<string>REPLACE_WITH_OPUS_AIP_ARN</string>
+				<key>claude-sonnet-5</key>
+				<string>REPLACE_WITH_SONNET_AIP_ARN</string>
+			</dict>
+		</dict>
+	</array>
+	<key>PayloadDescription</key>
+	<string>Points Claude Desktop and Claude Code at Amazon Bedrock, signed in through AWS IAM Identity Center.</string>
+	<key>PayloadDisplayName</key>
+	<string>Claude on Amazon Bedrock (CCWB)</string>
+	<key>PayloadIdentifier</key>
+	<string>com.example.claude.ccwb</string>
+	<key>PayloadOrganization</key>
+	<string>REPLACE_WITH_ORGANIZATION_NAME</string>
+	<key>PayloadScope</key>
+	<string>User</string>
+	<key>PayloadType</key>
+	<string>Configuration</string>
+	<key>PayloadUUID</key>
+	<string>C8309682-ADBF-817A-BD09-C07CDE4E002F</string>
+	<key>PayloadVersion</key>
+	<integer>1</integer>
+</dict>
+</plist>
