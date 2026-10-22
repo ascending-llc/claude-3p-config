@@ -30,7 +30,10 @@
       {
         "name": "example-registry",
         "url": "https://mcp.example.com/mcp?team=a&b=\"c\"",
-        "oauth": true
+        "oauth": {
+          "client_id": "claude-desktop-ccwb",
+          "scope": "mcp-proxy-ops"
+        }
       },
       {
         "name": "static-tools",

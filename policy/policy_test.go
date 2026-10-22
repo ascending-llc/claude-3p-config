@@ -161,8 +161,9 @@ func TestRegFile(t *testing.T) {
 		t.Fatalf("managedMcpServers: %s", err.Error())
 	}
 
-	if len(servers) != 2 || !servers[0].OAuth || servers[1].OAuth {
-		t.Errorf("managedMcpServers = %+v", servers)
+	wantOAuth := desktopOAuth{ClientID: "claude-desktop-ccwb", Scope: "mcp-proxy-ops", CallbackPort: defaultCallbackPort}
+	if len(servers) != 2 || servers[0].OAuth == nil || *servers[0].OAuth != wantOAuth || servers[1].OAuth != nil {
+		t.Errorf("managedMcpServers = %+v, want OAuth %+v on the first server only", servers, wantOAuth)
 	}
 
 	var settings struct {
@@ -208,6 +209,42 @@ func TestDesktopSettingsDefaults(t *testing.T) {
 	}
 	if !slices.Equal(models, want) {
 		t.Errorf("inferenceModels = %+v, want %+v", models, want)
+	}
+}
+
+func TestMCPOAuthCallbackPort(t *testing.T) {
+	tests := []struct {
+		name     string
+		port     int
+		wantPort int
+	}{
+		{name: "default", wantPort: defaultCallbackPort},
+		{name: "configured", port: 40000, wantPort: 40000},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg, err := Load(validConfig, Options{})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			cfg.Desktop.MCPServers[0].OAuth.CallbackPort = tt.port
+
+			settings, err := desktopSettings(cfg)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			var servers []desktopMCPServer
+			if err := json.Unmarshal([]byte(settings["managedMcpServers"]), &servers); err != nil {
+				t.Fatal(err)
+			}
+
+			if got := servers[0].OAuth.CallbackPort; got != tt.wantPort {
+				t.Errorf("callbackPort = %d, want %d", got, tt.wantPort)
+			}
+		})
 	}
 }
 
@@ -357,6 +394,15 @@ func TestParseRejectsInvalidConfig(t *testing.T) {
 			mutate:  func(c *Config) { c.Desktop.MCPServers[1].Name = "example-registry" },
 			wantErr: []string{`desktop.mcp_servers[1].name: "example-registry" is listed more than once`},
 		},
+		{name: "OAuth without client ID", mutate: func(c *Config) { c.Desktop.MCPServers[0].OAuth.ClientID = "" }, wantErr: []string{"desktop.mcp_servers[0].oauth.client_id: must be a client ID without spaces"}},
+		{name: "OAuth client ID with space", mutate: func(c *Config) { c.Desktop.MCPServers[0].OAuth.ClientID = "claude desktop" }, wantErr: []string{"desktop.mcp_servers[0].oauth.client_id: must be a client ID without spaces"}},
+		{
+			name:    "callback port in the Windows dynamic range",
+			mutate:  func(c *Config) { c.Desktop.MCPServers[0].OAuth.CallbackPort = 53280 },
+			wantErr: []string{"desktop.mcp_servers[0].oauth.callback_port: must be between 1024 and 49151, below the dynamic port range Windows reserves ports from, got 53280"},
+		},
+		{name: "privileged callback port", mutate: func(c *Config) { c.Desktop.MCPServers[0].OAuth.CallbackPort = 80 }, wantErr: []string{"desktop.mcp_servers[0].oauth.callback_port: must be between 1024 and 49151"}},
+		{name: "malformed scope", mutate: func(c *Config) { c.Desktop.MCPServers[0].OAuth.Scope = "mcp-proxy-ops  servers-read" }, wantErr: []string{"desktop.mcp_servers[0].oauth.scope: must be space-separated OAuth scopes"}},
 		{name: "bad identifier", mutate: func(c *Config) { c.Profile.Identifier = "claude" }, wantErr: []string{"profile.identifier: must be a reverse-DNS identifier"}},
 		{name: "empty organization", mutate: func(c *Config) { c.Profile.Organization = " " }, wantErr: []string{"profile.organization: must not be empty"}},
 		{
@@ -415,7 +461,13 @@ func TestParseRejectsMalformedJSON(t *testing.T) {
 		wantErr string
 	}{
 		{name: "unknown field", input: strings.Replace(valid, `"organization": "Example"`, `"organization": "Example", "extra": true`, 1), wantErr: `unknown field "extra"`},
-		{name: "unknown MCP field", input: strings.Replace(valid, `"oauth": true`, `"oauth": true, "transport": "sse"`, 1), wantErr: `unknown field "transport"`},
+		{name: "unknown MCP field", input: strings.Replace(valid, `"name": "static-tools"`, `"name": "static-tools", "transport": "sse"`, 1), wantErr: `unknown field "transport"`},
+		{name: "unknown OAuth field", input: strings.Replace(valid, `"scope": "mcp-proxy-ops"`, `"scope": "mcp-proxy-ops", "client_secret": "x"`, 1), wantErr: `unknown field "client_secret"`},
+		{
+			name:    "OAuth as a boolean, the former automatic registration",
+			input:   regexp.MustCompile(`"oauth": \{[^}]*\}`).ReplaceAllString(valid, `"oauth": true`),
+			wantErr: "oauth of type policy.OAuth",
+		},
 		{name: "trailing data", input: valid + `{}`, wantErr: "unexpected data after the JSON object"},
 	}
 
@@ -445,7 +497,7 @@ func TestPlaceholders(t *testing.T) {
 		t.Fatal("example config loaded without AllowPlaceholders")
 	}
 
-	for _, field := range []string{"aws.account_id", "aws.sso_start_url", "aws.sso_role_name", "models[0].aip_arn", "models[1].aip_arn", "models[2].aip_arn", "desktop.mcp_servers[0].url"} {
+	for _, field := range []string{"aws.account_id", "aws.sso_start_url", "aws.sso_role_name", "models[0].aip_arn", "models[1].aip_arn", "models[2].aip_arn", "desktop.mcp_servers[0].url", "desktop.mcp_servers[0].oauth.client_id"} {
 		if !strings.Contains(err.Error(), field+": replace the placeholder") {
 			t.Errorf("error does not flag %s:\n%s", field, err.Error())
 		}

@@ -32,7 +32,7 @@
 			<key>inferenceProvider</key>
 			<string>bedrock</string>
 			<key>managedMcpServers</key>
-			<string>[{"name":"example-registry","transport":"http","url":"https://mcp.example.com/mcp?team=a&amp;b=\"c\"","oauth":true},{"name":"static-tools","transport":"http","url":"https://tools.example.com/mcp"}]</string>
+			<string>[{"oauth":{"clientId":"claude-desktop-ccwb","scope":"mcp-proxy-ops","callbackPort":47280},"name":"example-registry","transport":"http","url":"https://mcp.example.com/mcp?team=a&amp;b=\"c\""},{"name":"static-tools","transport":"http","url":"https://tools.example.com/mcp"}]</string>
 		</dict>
 		<dict>
 			<key>PayloadDisplayName</key>

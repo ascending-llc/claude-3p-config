@@ -35,10 +35,17 @@ type (
 
 	// desktopMCPServer is one entry of Claude Desktop's managedMcpServers.
 	desktopMCPServer struct {
-		Name      string `json:"name"`
-		Transport string `json:"transport"`
-		URL       string `json:"url"`
-		OAuth     bool   `json:"oauth,omitempty"`
+		OAuth     *desktopOAuth `json:"oauth,omitempty"`
+		Name      string        `json:"name"`
+		Transport string        `json:"transport"`
+		URL       string        `json:"url"`
+	}
+
+	// desktopOAuth is the oauth object of a managedMcpServers entry.
+	desktopOAuth struct {
+		ClientID     string `json:"clientId"`
+		Scope        string `json:"scope,omitempty"`
+		CallbackPort int    `json:"callbackPort"`
 	}
 )
 
@@ -115,7 +122,7 @@ func desktopSettings(cfg Config) (map[string]string, error) {
 	if len(cfg.Desktop.MCPServers) > 0 {
 		servers := make([]desktopMCPServer, 0, len(cfg.Desktop.MCPServers))
 		for _, s := range cfg.Desktop.MCPServers {
-			servers = append(servers, desktopMCPServer{Name: s.Name, Transport: "http", URL: s.URL, OAuth: s.OAuth})
+			servers = append(servers, desktopMCPServer{Name: s.Name, Transport: "http", URL: s.URL, OAuth: oauthSettings(s.OAuth)})
 		}
 
 		serversJSON, err := compactJSON(servers)
@@ -127,6 +134,21 @@ func desktopSettings(cfg Config) (map[string]string, error) {
 	}
 
 	return settings, nil
+}
+
+// oauthSettings returns the oauth object of a managedMcpServers entry, always
+// with an explicit callback port so Desktop never falls back to 53280.
+func oauthSettings(o *OAuth) *desktopOAuth {
+	if o == nil {
+		return nil
+	}
+
+	port := o.CallbackPort
+	if port == 0 {
+		port = defaultCallbackPort
+	}
+
+	return &desktopOAuth{ClientID: o.ClientID, Scope: o.Scope, CallbackPort: port}
 }
 
 // claudeCodeSettings returns Claude Code's managed settings. Claude Code

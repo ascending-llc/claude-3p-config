@@ -19,6 +19,7 @@ Verified on macOS on 2026-10-21. Windows is generated but untested, so say so wh
 - Claude Desktop reads the `com.anthropic.claudefordesktop` payload, Claude Code the `com.anthropic.claudecode` payload; both work in one per-user (`PayloadScope` `User`) profile.
 - Claude Code's `availableModels` restricts aliases, not raw model IDs: `--model us.anthropic.…` still reaches Bedrock. Don't describe the allowlist as a security boundary; IAM or an SCP is.
 - `modelOverrides` keys must be Anthropic model IDs; without them Claude Code doesn't recognize an AIP ARN.
+- Claude Desktop runs managed-MCP OAuth sign-in on the device. Its automatic client registration always listens on `127.0.0.1:53280`, inside the Windows dynamic port range that WSL2 and Hyper-V reserve from, so the policy always sets a pre-registered `clientId` and a `callbackPort` below 49152. Desktop rejects `callbackPort` without `clientId`, drops any `managedMcpServers` entry it can't parse, and logs why in `main.log`.
 - On Windows both policies go under `HKLM`: Claude Code ignores some managed-only keys in `HKCU`, and Desktop ignores user policy when machine policy exists.
 - When unsure about a Claude Desktop or Claude Code setting, check the current docs (code.claude.com, claude.com/docs/third-party) instead of guessing; both products change quickly.
 

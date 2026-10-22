@@ -32,7 +32,10 @@
       {
         "name": "jarvis-registry",
         "url": "REPLACE_WITH_MCP_SERVER_URL",
-        "oauth": true
+        "oauth": {
+          "client_id": "REPLACE_WITH_OAUTH_CLIENT_ID",
+          "scope": "mcp-proxy-ops"
+        }
       }
     ]
   },

@@ -32,7 +32,7 @@
 			<key>inferenceProvider</key>
 			<string>bedrock</string>
 			<key>managedMcpServers</key>
-			<string>[{"name":"jarvis-registry","transport":"http","url":"REPLACE_WITH_MCP_SERVER_URL","oauth":true}]</string>
+			<string>[{"oauth":{"clientId":"REPLACE_WITH_OAUTH_CLIENT_ID","scope":"mcp-proxy-ops","callbackPort":47280},"name":"jarvis-registry","transport":"http","url":"REPLACE_WITH_MCP_SERVER_URL"}]</string>
 		</dict>
 		<dict>
 			<key>PayloadDisplayName</key>

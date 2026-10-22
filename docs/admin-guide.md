@@ -32,7 +32,10 @@ cp config/config.example.json config/config.json
 | `models[].anthropic_model_id` | The Anthropic model ID the AIP routes to (see below) |
 | `models[].label` | Optional name Claude Desktop shows; defaults to the capitalized tier, such as `Sonnet` |
 | `default_tier` | Optional tier both apps start with; defaults to `sonnet`. Must be a configured tier |
-| `desktop.mcp_servers[]` | Optional remote MCP servers: `name`, `url` (final https address) and `oauth` |
+| `desktop.mcp_servers[]` | Optional remote MCP servers: `name`, `url` (final https address) and, for a server that needs sign-in, `oauth` |
+| `desktop.mcp_servers[].oauth.client_id` | The public OAuth client registered for Claude Desktop at the server's authorization server (see below) |
+| `desktop.mcp_servers[].oauth.scope` | Optional space-separated scopes Desktop requests. Without it, Desktop requests every scope the server advertises |
+| `desktop.mcp_servers[].oauth.callback_port` | Optional loopback port Desktop receives the sign-in on; defaults to `47280`. Must be between 1024 and 49151 |
 | `profile.identifier` | Reverse-DNS identifier. **Keep it stable**: a profile with the same identifier replaces the installed one |
 | `profile.display_name`, `profile.organization` | Shown in System Settings |
 
@@ -51,7 +54,33 @@ Without an Opus model, the `opus` alias isn't allowed in Claude Code and Claude 
 
 ### MCP connectors with OAuth
 
-For an `oauth: true` server, Claude Desktop registers itself with the server's authorization server and receives the sign-in result at `http://127.0.0.1:53280/callback`. The authorization server must accept that redirect URI. Claude Desktop doesn't follow HTTP redirects from the MCP URL or its OAuth metadata, so use final addresses.
+Claude Desktop signs each person in to an OAuth connector itself. It opens the browser and receives the result on a temporary listener at `http://127.0.0.1:<callback_port>/callback`. The policy always gives Desktop a client registered in advance and a callback port of 47280 by default, because Desktop's own automatic client registration doesn't work reliably on Windows:
+
+- Automatic registration always listens on port 53280. On Windows that port is inside the dynamic port range (49152–65535 by default), from which WSL2, Docker Desktop and Hyper-V reserve blocks of ports. When a block covers 53280, **Connect** shows only a brief "connection failed" message, and Desktop's `main.log` records `listen EACCES: permission denied 127.0.0.1:53280`. The blocks move after each reboot, so the same machine can work one day and fail the next.
+- Desktop accepts a different port only together with a client ID.
+
+Port 47280 is below the dynamic range, so Windows never reserves it, and it's in a block IANA hasn't assigned. The generator rejects ports outside 1024–49151.
+
+For each OAuth server, register **one** client at its authorization server for every device to share:
+
+- A public client with no secret: `token_endpoint_auth_method` `none`, protected by PKCE (S256). A secret in a policy file would be readable on every device, so Desktop doesn't need one.
+- Redirect URI `http://127.0.0.1:47280/callback`, or your `callback_port`.
+- Grant types `authorization_code` and `refresh_token`, so Desktop can renew the sign-in in the background.
+
+If the server supports dynamic client registration (its OAuth metadata lists a `registration_endpoint`), one request registers the client and returns its `client_id`:
+
+```bash
+curl -sS -X POST <registration_endpoint> -H 'Content-Type: application/json' -d '{
+  "client_name": "Claude Desktop",
+  "redirect_uris": ["http://127.0.0.1:47280/callback"],
+  "grant_types": ["authorization_code", "refresh_token"],
+  "response_types": ["code"],
+  "token_endpoint_auth_method": "none"}'
+```
+
+Confirm with the server's operators that the client is kept permanently. Some servers delete dynamically registered clients after a while or on redeploy, and every device's connector then fails until you register a new client and redeploy the policy. For the Jarvis Registry, a static client built into the server is planned; see [Jarvis Registry: a static OAuth client for Claude Desktop](jarvis-static-oauth-client.md).
+
+Claude Desktop doesn't follow HTTP redirects from the MCP URL or its OAuth metadata, so use final addresses.
 
 ## 3. Generate
 
@@ -90,7 +119,7 @@ To change models or settings later, update the config, regenerate and reinstall.
 | `inferenceCredentialKind` | `interactive`: Desktop's own IAM Identity Center sign-in |
 | `inferenceBedrockRegion`, `inferenceBedrockSso*` | From `aws.*` |
 | `inferenceModels` | JSON list of the AIPs with labels and tiers. The `default_tier` model comes first, which makes it Desktop's default |
-| `managedMcpServers` | JSON list of `desktop.mcp_servers`; omitted when empty |
+| `managedMcpServers` | JSON list of `desktop.mcp_servers`; omitted when empty. Each `oauth` becomes Desktop's `clientId`, `scope` and `callbackPort`, with the port always set |
 
 **Claude Code** (`com.anthropic.claudecode` payload, or the JSON `Settings` value under `HKLM\SOFTWARE\Policies\ClaudeCode`):
 

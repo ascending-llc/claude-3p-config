@@ -62,12 +62,29 @@ type (
 
 	// MCPServer is a remote MCP server reached over streamable HTTP.
 	MCPServer struct {
+		// OAuth makes Claude Desktop run the server's MCP OAuth sign-in. Leave
+		// it unset for a server that needs no sign-in.
+		OAuth *OAuth `json:"oauth,omitempty"`
 		// Name is the connector name users see in Claude Desktop.
 		Name string `json:"name"`
 		// URL is the server's final https address. Claude Desktop doesn't follow redirects.
 		URL string `json:"url"`
-		// OAuth makes Claude Desktop run the server's MCP OAuth sign-in.
-		OAuth bool `json:"oauth,omitempty"`
+	}
+
+	// OAuth is the pre-registered public OAuth client Claude Desktop signs in
+	// to an MCP server with. Desktop's automatic client registration always
+	// listens on port 53280, which Windows can reserve for WSL2 or Hyper-V, and
+	// Desktop accepts another callback port only with a client ID.
+	OAuth struct {
+		// ClientID is the client registered at the server's authorization
+		// server, with redirect URI http://127.0.0.1:<CallbackPort>/callback.
+		ClientID string `json:"client_id"`
+		// Scope is the space-separated scopes Desktop requests. When it's
+		// empty, Desktop requests every scope the server advertises.
+		Scope string `json:"scope,omitempty"`
+		// CallbackPort is the loopback port Desktop receives the sign-in on. It
+		// defaults to 47280 and must be below Windows' dynamic port range.
+		CallbackPort int `json:"callback_port,omitempty"`
 	}
 
 	// Profile identifies the generated macOS configuration profile.
@@ -102,6 +119,13 @@ const (
 
 	// placeholderMarker marks values in config.example.json that a deployer must replace.
 	placeholderMarker = "REPLACE_WITH_"
+
+	// defaultCallbackPort is the OAuth callback port when OAuth.CallbackPort is
+	// unset. It's in an unassigned IANA block and below the dynamic range that
+	// Windows (49152-65535 by default) reserves ports from for WSL2 and Hyper-V.
+	defaultCallbackPort = 47280
+	minCallbackPort     = 1024
+	maxCallbackPort     = 49151
 )
 
 var (
@@ -113,6 +137,9 @@ var (
 	roleNamePattern   = regexp.MustCompile(`^[\w+=,.@-]{1,64}$`)
 	modelIDPattern    = regexp.MustCompile(`^claude-[a-z0-9-]+$`)
 	serverNamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]*$`)
+	// clientIDPattern and scopePattern follow the client_id and scope syntax of RFC 6749 appendix A.
+	clientIDPattern   = regexp.MustCompile(`^[\x21-\x7E]+$`)
+	scopePattern      = regexp.MustCompile(`^[\x21\x23-\x5B\x5D-\x7E]+( [\x21\x23-\x5B\x5D-\x7E]+)*$`)
 	identifierPattern = regexp.MustCompile(`^[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$`)
 	aipARNPattern     = regexp.MustCompile(
 		`^arn:aws(?:-us-gov|-cn)?:bedrock:([a-z0-9-]+):([0-9]{12}):application-inference-profile/[a-z0-9]+$`)
@@ -271,6 +298,24 @@ func (v *validator) validateMCPServers(servers []MCPServer) {
 		seen[s.Name] = true
 
 		v.field(path+".url", s.URL, httpsURL)
+
+		if s.OAuth != nil {
+			v.validateOAuth(path+".oauth", *s.OAuth)
+		}
+	}
+}
+
+func (v *validator) validateOAuth(path string, o OAuth) {
+	v.field(path+".client_id", o.ClientID, pattern(clientIDPattern, "a client ID without spaces"))
+
+	if o.CallbackPort != 0 && (o.CallbackPort < minCallbackPort || o.CallbackPort > maxCallbackPort) {
+		v.fail(path+".callback_port", fmt.Sprintf(
+			"must be between %d and %d, below the dynamic port range Windows reserves ports from, got %d",
+			minCallbackPort, maxCallbackPort, o.CallbackPort))
+	}
+
+	if o.Scope != "" {
+		v.field(path+".scope", o.Scope, pattern(scopePattern, "space-separated OAuth scopes"))
 	}
 }
 
