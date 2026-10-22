@@ -46,6 +46,8 @@ Verified on macOS on 2026-10-21. Windows is generated but untested, so say so wh
 ## Tooling
 
 - Run `pre-commit install -t pre-commit` once. Use the `Makefile` targets: `make all` (test + lint) is the bar for done; `make fmt` fixes formatting and import grouping.
+- pre-commit builds its Python hooks (tartufo) with `python3.14`, matching `.python-version`. tartufo scans staged changes for secrets; add a false positive to `tartufo.toml` with a `reason`, never by disabling the hook.
+- CI (`.github/workflows/test-and-lint.yaml`) runs `make test`, `make lint` and `make tartufo` on Linux, and `make test` on macOS for the `plutil -lint` check.
 - golangci-lint must pass. Suppress a false positive in `.golangci.yaml` under `linters.exclusions.rules`, scoped to `path` and `text`, with a comment explaining why; never a blanket `//nolint` or a disabled linter.
 - `config/config.json` and `dist/` hold real account details and are git-ignored; never commit them or paste their contents into examples or tests.
 - `.reg` files are UTF-16LE with CRLF line endings and marked `binary` in `.gitattributes`; read them with `iconv -f UTF-16 -t UTF-8`.
