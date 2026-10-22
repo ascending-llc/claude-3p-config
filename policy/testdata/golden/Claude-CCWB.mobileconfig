@@ -28,7 +28,7 @@
 			<key>inferenceCredentialKind</key>
 			<string>interactive</string>
 			<key>inferenceModels</key>
-			<string>[{"name":"arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/sonnet0001","labelOverride":"Sonnet","anthropicFamilyTier":"sonnet"},{"name":"arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/haiku00001","labelOverride":"Haiku","anthropicFamilyTier":"haiku"}]</string>
+			<string>[{"name":"arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/sonnet0001","labelOverride":"Sonnet","anthropicFamilyTier":"sonnet"},{"name":"arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/opus000001","labelOverride":"Opus","anthropicFamilyTier":"opus"},{"name":"arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/haiku00001","labelOverride":"Haiku","anthropicFamilyTier":"haiku"}]</string>
 			<key>inferenceProvider</key>
 			<string>bedrock</string>
 			<key>managedMcpServers</key>
@@ -47,6 +47,7 @@
 			<integer>1</integer>
 			<key>availableModels</key>
 			<array>
+				<string>opus</string>
 				<string>sonnet</string>
 				<string>haiku</string>
 			</array>
@@ -58,6 +59,8 @@
 			<dict>
 				<key>ANTHROPIC_DEFAULT_HAIKU_MODEL</key>
 				<string>arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/haiku00001</string>
+				<key>ANTHROPIC_DEFAULT_OPUS_MODEL</key>
+				<string>arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/opus000001</string>
 				<key>ANTHROPIC_DEFAULT_SONNET_MODEL</key>
 				<string>arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/sonnet0001</string>
 				<key>ANTHROPIC_MODEL</key>
@@ -73,6 +76,8 @@
 			<dict>
 				<key>claude-haiku-4-5-20251001</key>
 				<string>arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/haiku00001</string>
+				<key>claude-opus-5-5</key>
+				<string>arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/opus000001</string>
 				<key>claude-sonnet-5</key>
 				<string>arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/sonnet0001</string>
 			</dict>

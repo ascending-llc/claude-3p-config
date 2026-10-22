@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 )
 
@@ -22,7 +23,9 @@ type (
 		AWS     AWS     `json:"aws"`
 		Profile Profile `json:"profile"`
 		Models  []Model `json:"models"`
-		Desktop Desktop `json:"desktop"`
+		// DefaultTier is the tier both apps start with. It defaults to TierSonnet.
+		DefaultTier string  `json:"default_tier,omitempty"`
+		Desktop     Desktop `json:"desktop"`
 	}
 
 	// AWS holds the account, regions and IAM Identity Center sign-in details.
@@ -41,7 +44,7 @@ type (
 
 	// Model maps one model tier to the application inference profile (AIP) that serves it.
 	Model struct {
-		// Tier is TierSonnet or TierHaiku.
+		// Tier is TierOpus, TierSonnet or TierHaiku.
 		Tier string `json:"tier"`
 		// AIPARN is the application inference profile ARN.
 		AIPARN string `json:"aip_arn"`
@@ -91,7 +94,9 @@ type (
 )
 
 const (
-	// TierSonnet and TierHaiku are the model tiers, in the order the policies list them.
+	// TierOpus, TierSonnet and TierHaiku are the model tiers, in the order the
+	// policies list them after the default tier. Opus is optional.
+	TierOpus   = "opus"
 	TierSonnet = "sonnet"
 	TierHaiku  = "haiku"
 
@@ -100,6 +105,9 @@ const (
 )
 
 var (
+	// tiers lists every tier in policy order.
+	tiers = []string{TierOpus, TierSonnet, TierHaiku}
+
 	accountIDPattern  = regexp.MustCompile(`^[0-9]{12}$`)
 	regionPattern     = regexp.MustCompile(`^[a-z]{2}(-gov)?-[a-z]+-[0-9]+$`)
 	roleNamePattern   = regexp.MustCompile(`^[\w+=,.@-]{1,64}$`)
@@ -151,21 +159,47 @@ func Parse(r io.Reader, opts Options) (Config, error) {
 	return cfg, nil
 }
 
-// model returns the model for tier. Callers rely on validation having
-// guaranteed exactly one model per tier.
-func (c Config) model(tier string) Model {
+// model returns the model for tier, and false when the tier isn't configured.
+// Validation guarantees at most one model per tier, and always sonnet and haiku.
+func (c Config) model(tier string) (Model, bool) {
 	for _, m := range c.Models {
 		if m.Tier == tier {
-			return m
+			return m, true
 		}
 	}
 
-	return Model{}
+	return Model{}, false
+}
+
+// defaultTier returns DefaultTier, or TierSonnet when it isn't set.
+func (c Config) defaultTier() string {
+	if c.DefaultTier == "" {
+		return TierSonnet
+	}
+
+	return c.DefaultTier
+}
+
+// orderedModels returns the configured models with the default tier first,
+// then the others in tier order. Claude Desktop treats the first as its default.
+func (c Config) orderedModels() []Model {
+	def := c.defaultTier()
+	m, _ := c.model(def)
+	models := []Model{m}
+
+	for _, tier := range tiers {
+		if m, ok := c.model(tier); ok && tier != def {
+			models = append(models, m)
+		}
+	}
+
+	return models
 }
 
 func (v *validator) validate(cfg Config) {
 	v.validateAWS(cfg.AWS)
 	v.validateModels(cfg.Models, cfg.AWS)
+	v.validateDefaultTier(cfg)
 	v.validateMCPServers(cfg.Desktop.MCPServers)
 	v.field("profile.identifier", cfg.Profile.Identifier, pattern(identifierPattern, "a reverse-DNS identifier such as com.example.claude"))
 	v.field("profile.display_name", cfg.Profile.DisplayName, nonEmpty)
@@ -181,18 +215,14 @@ func (v *validator) validateAWS(a AWS) {
 }
 
 func (v *validator) validateModels(models []Model, a AWS) {
-	if len(models) != 2 {
-		v.fail("models", "must list exactly two models, one sonnet and one haiku")
-	}
-
 	seen := map[string]bool{}
 
 	for i, m := range models {
 		path := fmt.Sprintf("models[%d]", i)
 
 		switch {
-		case m.Tier != TierSonnet && m.Tier != TierHaiku:
-			v.fail(path+".tier", fmt.Sprintf("must be %q or %q", TierSonnet, TierHaiku))
+		case !slices.Contains(tiers, m.Tier):
+			v.fail(path+".tier", fmt.Sprintf("must be %q, %q or %q", TierOpus, TierSonnet, TierHaiku))
 		case seen[m.Tier]:
 			v.fail(path+".tier", fmt.Sprintf("%q is listed more than once", m.Tier))
 		}
@@ -207,6 +237,22 @@ func (v *validator) validateModels(models []Model, a AWS) {
 
 			return nil
 		})
+	}
+
+	for _, tier := range []string{TierSonnet, TierHaiku} {
+		if !seen[tier] {
+			v.fail("models", fmt.Sprintf("must include a %s model", tier))
+		}
+	}
+}
+
+func (v *validator) validateDefaultTier(cfg Config) {
+	if cfg.DefaultTier == "" {
+		return
+	}
+
+	if _, ok := cfg.model(cfg.DefaultTier); !ok {
+		v.fail("default_tier", fmt.Sprintf("must be the tier of a configured model, got %q", cfg.DefaultTier))
 	}
 }
 

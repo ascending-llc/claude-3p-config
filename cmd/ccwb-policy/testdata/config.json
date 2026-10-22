@@ -17,6 +17,12 @@
       "tier": "haiku",
       "aip_arn": "arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/haiku00001",
       "anthropic_model_id": "claude-haiku-4-5-20251001"
+    },
+    {
+      "tier": "opus",
+      "aip_arn": "arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/opus000001",
+      "anthropic_model_id": "claude-opus-5-5",
+      "label": "Opus"
     }
   ],
   "desktop": {

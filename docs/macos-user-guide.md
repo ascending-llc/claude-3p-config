@@ -44,7 +44,7 @@ To check it worked, run `ls "/Library/Managed Preferences/$USER/"`. You should s
 2. Choose to sign in with AWS. Your browser opens the AWS access portal, which may first send you to your organization's sign-in page.
 3. Check that the code shown in the browser matches the one in Claude Desktop, click **Confirm and continue**, then **Allow**.
 
-Claude Desktop then shows the Sonnet and Haiku models from your organization.
+Claude Desktop then shows the models your organization configured, such as Sonnet, Haiku and possibly Opus.
 
 **If the browser page hangs after "Confirm and continue"**, copy the page's address into another browser, such as Safari, and approve it there. Some Chrome setups never send the approval.
 
@@ -59,14 +59,14 @@ Open a **new** terminal and run `claude`. The first request runs `aws sso login 
 Run `/status` to check. You should see:
 
 - `API provider: Amazon Bedrock`
-- `Model:` your Sonnet AIP's ARN
+- `Model:` the ARN of your organization's default model AIP (usually Sonnet)
 - `Setting sources:` including `Enterprise managed settings (plist)`
 
 Good to know:
 
 - **Every `claude` session on this Mac now uses Bedrock**, including ones that used a Claude subscription before. Remove the profile to switch back.
 - **AWS credentials exported in your shell win.** If `AWS_ACCESS_KEY_ID` or `AWS_SESSION_TOKEN` is set, Claude Code uses them instead of the `CCWB` profile. Unset them, or start a new terminal.
-- **`/model` offers only Sonnet and Haiku.** Web search isn't available on Bedrock.
+- **`/model` offers only your organization's models.** Web search isn't available on Bedrock.
 
 ## Sign out
 
@@ -88,5 +88,5 @@ The two sign-ins are independent; signing out of one doesn't affect the other.
 | Claude Desktop doesn't offer AWS sign-in | Check the profile is installed (step 2), then quit and reopen Claude Desktop. Desktop's log is `~/Library/Logs/Claude-3p/main.log` |
 | A connector is missing or won't connect | Quit and reopen Claude Desktop. If it still fails, send the error message to your administrator; never share sign-in codes or tokens |
 | Claude Code: `AWS authentication failed` | Run `aws sso login --profile CCWB`, then retry. If it persists, ask your administrator to check your permission set |
-| Claude Code: `403 … not authorized … with an explicit deny` | You asked for a model outside your organization's AIPs, for example with `--model`. Use `/model` to pick Sonnet or Haiku |
+| Claude Code: `403 … not authorized … with an explicit deny` | You asked for a model outside your organization's AIPs, for example with `--model`. Use `/model` to pick one of your organization's models |
 | `/status` doesn't list `Enterprise managed settings (plist)` | The profile isn't installed for your user; repeat step 2 |

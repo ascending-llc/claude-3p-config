@@ -18,8 +18,15 @@
       "aip_arn": "REPLACE_WITH_HAIKU_AIP_ARN",
       "anthropic_model_id": "claude-haiku-4-5-20251001",
       "label": "Haiku"
+    },
+    {
+      "tier": "opus",
+      "aip_arn": "REPLACE_WITH_OPUS_AIP_ARN",
+      "anthropic_model_id": "claude-opus-5-5",
+      "label": "Opus"
     }
   ],
+  "default_tier": "sonnet",
   "desktop": {
     "mcp_servers": [
       {

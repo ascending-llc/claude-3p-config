@@ -6,13 +6,13 @@ This guide is for whoever prepares the configuration: AWS setup, `config/config.
 
 - **IAM Identity Center** in your organization, with the identity provider you use (such as Entra ID) connected.
 - **A permission set** assigned to the people who'll use Claude, in the account that holds the AIPs. Both Claude Desktop and Claude Code sign in with it.
-- **Two application inference profiles (AIPs)** in that account and in your Bedrock region: one for a Sonnet model and one for a Haiku model. All Claude traffic goes through them, so cost is tracked per AIP. Bedrock doesn't attribute cost per person; per-person activity shows up as the caller's role session (`…/<user email>`) in CloudTrail or Bedrock invocation logs.
+- **An application inference profile (AIP) per model tier** in that account and in your Bedrock region: one for a Sonnet model, one for a Haiku model and, optionally, one for an Opus model. All Claude traffic goes through them, so cost is tracked per AIP. Bedrock doesn't attribute cost per person; per-person activity shows up as the caller's role session (`…/<user email>`) in CloudTrail or Bedrock invocation logs.
 
 ### Permissions, and why IAM is the real model boundary
 
-Give the permission set what the [Claude Code Bedrock docs](https://code.claude.com/docs/en/amazon-bedrock#iam-configuration) list (`bedrock:InvokeModel`, `bedrock:InvokeModelWithResponseStream`, `bedrock:ListInferenceProfiles`, `bedrock:GetInferenceProfile`), narrowed to your two AIPs and the foundation models they route to.
+Give the permission set what the [Claude Code Bedrock docs](https://code.claude.com/docs/en/amazon-bedrock#iam-configuration) list (`bedrock:InvokeModel`, `bedrock:InvokeModelWithResponseStream`, `bedrock:ListInferenceProfiles`, `bedrock:GetInferenceProfile`), narrowed to your AIPs and the foundation models they route to.
 
-The generated Claude Code policy limits the `/model` picker to Sonnet and Haiku, but that allowlist only covers model aliases. Testing showed that `claude --model us.anthropic.claude-sonnet-5` still sends the request to Bedrock. Only IAM or a service control policy (SCP) can stop people from calling models outside your AIPs, so deny direct model access there. In the tested organization, an SCP blocked those requests even for an administrator role.
+The generated Claude Code policy limits the `/model` picker to the tiers you configured, but that allowlist only covers model aliases. Testing showed that `claude --model us.anthropic.claude-sonnet-5` still sends the request to Bedrock. Only IAM or a service control policy (SCP) can stop people from calling models outside your AIPs, so deny direct model access there. In the tested organization, an SCP blocked those requests even for an administrator role.
 
 ## 2. Fill in the config
 
@@ -27,10 +27,11 @@ cp config/config.example.json config/config.json
 | `aws.sso_start_url` | Your access portal URL, such as `https://example.awsapps.com/start` |
 | `aws.sso_region` | The IAM Identity Center region |
 | `aws.sso_role_name` | The permission set name |
-| `models[].tier` | `sonnet` or `haiku`; exactly one of each |
+| `models[].tier` | `opus`, `sonnet` or `haiku`; one model per tier. Sonnet and Haiku are required, Opus is optional |
 | `models[].aip_arn` | The AIP ARN; must match `account_id` and `bedrock_region` |
 | `models[].anthropic_model_id` | The Anthropic model ID the AIP routes to (see below) |
-| `models[].label` | Optional name Claude Desktop shows; defaults to `Sonnet` or `Haiku` |
+| `models[].label` | Optional name Claude Desktop shows; defaults to the capitalized tier, such as `Sonnet` |
+| `default_tier` | Optional tier both apps start with; defaults to `sonnet`. Must be a configured tier |
 | `desktop.mcp_servers[]` | Optional remote MCP servers: `name`, `url` (final https address) and `oauth` |
 | `profile.identifier` | Reverse-DNS identifier. **Keep it stable**: a profile with the same identifier replaces the installed one |
 | `profile.display_name`, `profile.organization` | Shown in System Settings |
@@ -42,7 +43,11 @@ aws bedrock list-inference-profiles --type-equals APPLICATION --region <bedrock_
 aws bedrock get-inference-profile --inference-profile-identifier <aip_arn> --query 'models[].modelArn'
 ```
 
-Turn the foundation model ID into `anthropic_model_id` by dropping the `anthropic.` prefix and any `-v1:0` suffix. For example, `anthropic.claude-sonnet-5` becomes `claude-sonnet-5`, and `anthropic.claude-haiku-4-5-20251001-v1:0` becomes `claude-haiku-4-5-20251001`. Claude Code needs this mapping (`modelOverrides`) to recognize the AIP: without it the `/model` picker shows the raw ARN, features may be detected wrongly, and Sonnet 5 loses its 1M-token context window.
+Turn the foundation model ID into `anthropic_model_id` by dropping the `anthropic.` prefix and any `-v1:0` suffix. For example, `anthropic.claude-sonnet-5` becomes `claude-sonnet-5`, `anthropic.claude-opus-5-5` becomes `claude-opus-5-5`, and `anthropic.claude-haiku-4-5-20251001-v1:0` becomes `claude-haiku-4-5-20251001`. Claude Code needs this mapping (`modelOverrides`) to recognize the AIP: without it the `/model` picker shows the raw ARN, features may be detected wrongly, and Sonnet 5 loses its 1M-token context window.
+
+### Opus and the default model
+
+Without an Opus model, the `opus` alias isn't allowed in Claude Code and Claude Desktop doesn't offer Opus. If you don't provision an Opus AIP, delete the `opus` entry from the example config. Opus costs more per token than Sonnet, and on Bedrock every token is billed, so set `default_tier` to `opus` only as a deliberate choice. The Opus tier and `default_tier` haven't been tested end to end yet; see the [test plan](test-plan.md).
 
 ### MCP connectors with OAuth
 
@@ -84,17 +89,17 @@ To change models or settings later, update the config, regenerate and reinstall.
 | `inferenceProvider` | `bedrock` |
 | `inferenceCredentialKind` | `interactive`: Desktop's own IAM Identity Center sign-in |
 | `inferenceBedrockRegion`, `inferenceBedrockSso*` | From `aws.*` |
-| `inferenceModels` | JSON list of the two AIPs with labels and tiers |
+| `inferenceModels` | JSON list of the AIPs with labels and tiers. The `default_tier` model comes first, which makes it Desktop's default |
 | `managedMcpServers` | JSON list of `desktop.mcp_servers`; omitted when empty |
 
 **Claude Code** (`com.anthropic.claudecode` payload, or the JSON `Settings` value under `HKLM\SOFTWARE\Policies\ClaudeCode`):
 
 | Key | Value |
 | --- | --- |
-| `env` | `CLAUDE_CODE_USE_BEDROCK=1`, `AWS_PROFILE=CCWB`, `AWS_REGION`, and `ANTHROPIC_MODEL`, `ANTHROPIC_DEFAULT_SONNET_MODEL`, `ANTHROPIC_DEFAULT_HAIKU_MODEL` set to the AIPs |
+| `env` | `CLAUDE_CODE_USE_BEDROCK=1`, `AWS_PROFILE=CCWB`, `AWS_REGION`, `ANTHROPIC_MODEL` set to the `default_tier` AIP, and `ANTHROPIC_DEFAULT_<TIER>_MODEL` set to each configured tier's AIP |
 | `awsAuthRefresh` | `aws sso login --profile CCWB`, run only after credentials have expired |
 | `modelOverrides` | Each `anthropic_model_id` mapped to its AIP |
-| `availableModels`, `enforceAvailableModels` | `sonnet` and `haiku` only, including for the Default option. Without this, Claude Code's Bedrock default is Opus through a public inference profile, which bypasses your AIPs |
+| `availableModels`, `enforceAvailableModels` | Only the configured tiers' aliases, including for the Default option. Without this, Claude Code's Bedrock default is Opus through a public inference profile, which bypasses your AIPs |
 
 Because these are managed settings, they apply to **every** Claude Code session for that user on that machine, and users can't override them.
 

@@ -28,7 +28,7 @@
 			<key>inferenceCredentialKind</key>
 			<string>interactive</string>
 			<key>inferenceModels</key>
-			<string>[{"name":"REPLACE_WITH_SONNET_AIP_ARN","labelOverride":"Sonnet","anthropicFamilyTier":"sonnet"},{"name":"REPLACE_WITH_HAIKU_AIP_ARN","labelOverride":"Haiku","anthropicFamilyTier":"haiku"}]</string>
+			<string>[{"name":"REPLACE_WITH_SONNET_AIP_ARN","labelOverride":"Sonnet","anthropicFamilyTier":"sonnet"},{"name":"REPLACE_WITH_OPUS_AIP_ARN","labelOverride":"Opus","anthropicFamilyTier":"opus"},{"name":"REPLACE_WITH_HAIKU_AIP_ARN","labelOverride":"Haiku","anthropicFamilyTier":"haiku"}]</string>
 			<key>inferenceProvider</key>
 			<string>bedrock</string>
 			<key>managedMcpServers</key>
@@ -47,6 +47,7 @@
 			<integer>1</integer>
 			<key>availableModels</key>
 			<array>
+				<string>opus</string>
 				<string>sonnet</string>
 				<string>haiku</string>
 			</array>
@@ -58,6 +59,8 @@
 			<dict>
 				<key>ANTHROPIC_DEFAULT_HAIKU_MODEL</key>
 				<string>REPLACE_WITH_HAIKU_AIP_ARN</string>
+				<key>ANTHROPIC_DEFAULT_OPUS_MODEL</key>
+				<string>REPLACE_WITH_OPUS_AIP_ARN</string>
 				<key>ANTHROPIC_DEFAULT_SONNET_MODEL</key>
 				<string>REPLACE_WITH_SONNET_AIP_ARN</string>
 				<key>ANTHROPIC_MODEL</key>
@@ -73,6 +76,8 @@
 			<dict>
 				<key>claude-haiku-4-5-20251001</key>
 				<string>REPLACE_WITH_HAIKU_AIP_ARN</string>
+				<key>claude-opus-5-5</key>
+				<string>REPLACE_WITH_OPUS_AIP_ARN</string>
 				<key>claude-sonnet-5</key>
 				<string>REPLACE_WITH_SONNET_AIP_ARN</string>
 			</dict>

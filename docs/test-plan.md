@@ -6,7 +6,7 @@ Run this on each new platform, and again after changing the config schema or the
 
 | Platform | Date | Versions | Result |
 | --- | --- | --- | --- |
-| macOS 26.7.1 | 2026-10-21 | Claude Desktop 2.26454.2, Claude Code 2.1.306, AWS CLI 2.37.12 | All passed, with the administrator permission set |
+| macOS 26.7.1 | 2026-10-21 | Claude Desktop 2.26454.2, Claude Code 2.1.306, AWS CLI 2.37.12 | All passed, with the administrator permission set. Sonnet and Haiku only: the Opus tier and `default_tier` were added later and are untested |
 | Windows | — | — | Not run |
 
 ## Before you start
@@ -20,7 +20,7 @@ Run this on each new platform, and again after changing the config schema or the
 | # | Steps | Pass when |
 | --- | --- | --- |
 | D1 | Install the policy, quit and reopen Desktop, sign in with AWS | The device page shows the same code as Desktop; after **Allow**, Desktop is signed in |
-| D2 | Open the model picker | Only the configured Sonnet and Haiku labels |
+| D2 | Open the model picker | Only the configured models' labels, with the `default_tier` model selected |
 | D3 | Chat with each model | Replies arrive; Bedrock usage of the matching AIP goes up |
 | D4 | **Customize → Connectors**, connect each managed connector | It's listed, OAuth sign-in completes, and its tools work in a chat |
 
@@ -30,10 +30,10 @@ Run this on each new platform, and again after changing the config schema or the
 | --- | --- | --- |
 | T1 | `aws sso logout`, then `claude -p "say hi"` | `awsAuthRefresh` opens the browser sign-in, then the reply arrives |
 | T2 | `claude -p "say hi"` again | No browser, quick reply |
-| T3 | `claude`, then `/status` | Provider Amazon Bedrock, the configured region, the Sonnet AIP as model |
-| T4 | `/model` | Only Sonnet and Haiku, by name rather than ARN; switching works |
-| T5 | `claude --model opus -p hi` and `claude --model us.anthropic.claude-sonnet-5 -p hi` | Both refused. The client allowlist doesn't catch these; the refusal must come from IAM or an SCP as a `403 … not authorized` |
-| T6 | Have a few turns | Usage of both AIPs goes up: Sonnet for the conversation, Haiku for background tasks such as the session title |
+| T3 | `claude`, then `/status` | Provider Amazon Bedrock, the configured region, the `default_tier` AIP as model |
+| T4 | `/model` | Only the configured tiers, by name rather than ARN, with the `default_tier` model as Default; switching works |
+| T5 | `claude --model us.anthropic.claude-sonnet-5 -p hi`, and `claude --model opus -p hi` if no Opus model is configured | Both refused. The client allowlist doesn't catch these; the refusal must come from IAM or an SCP as a `403 … not authorized` |
+| T6 | Have a few turns | Usage goes up on the default model's AIP for the conversation and on the Haiku AIP for background tasks such as the session title |
 | T7 | Look up the calls in CloudTrail or Bedrock invocation logs | The caller is the user's role session, `…/<email>` |
 | T8 | Use tools, run a subagent, check `/context` | 1M-token window on Sonnet, cache reads above zero after the second turn, streaming works |
 | T9 | With the policy installed, set a different model and `AWS_PROFILE` in the user settings file (`~/.claude/settings.json`) | `/status` lists the managed source (`Enterprise managed settings (plist)` on macOS), and the managed values win |

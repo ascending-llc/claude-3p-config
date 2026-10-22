@@ -84,17 +84,16 @@ func Render(cfg Config) (Artifacts, error) {
 // is a string, because the configuration profile and the registry both store
 // the JSON-valued keys as strings.
 func desktopSettings(cfg Config) (map[string]string, error) {
-	models := make([]desktopModel, 0, 2)
+	ordered := cfg.orderedModels()
+	models := make([]desktopModel, 0, len(ordered))
 
-	for _, tier := range []string{TierSonnet, TierHaiku} {
-		m := cfg.model(tier)
-
+	for _, m := range ordered {
 		label := m.Label
 		if label == "" {
-			label = strings.ToUpper(tier[:1]) + tier[1:]
+			label = strings.ToUpper(m.Tier[:1]) + m.Tier[1:]
 		}
 
-		models = append(models, desktopModel{Name: m.AIPARN, LabelOverride: label, AnthropicFamilyTier: tier})
+		models = append(models, desktopModel{Name: m.AIPARN, LabelOverride: label, AnthropicFamilyTier: m.Tier})
 	}
 
 	modelsJSON, err := compactJSON(models)
@@ -131,26 +130,36 @@ func desktopSettings(cfg Config) (map[string]string, error) {
 }
 
 // claudeCodeSettings returns Claude Code's managed settings. Claude Code
-// reaches Bedrock through ProfileName, and every model alias resolves to one
-// of the configured AIPs.
+// reaches Bedrock through ProfileName, and every allowed model alias resolves
+// to one of the configured AIPs. An unconfigured tier's alias isn't allowed.
 func claudeCodeSettings(cfg Config) map[string]any {
-	sonnet, haiku := cfg.model(TierSonnet), cfg.model(TierHaiku)
+	defaultModel, _ := cfg.model(cfg.defaultTier())
+	env := map[string]string{
+		"CLAUDE_CODE_USE_BEDROCK": "1",
+		"AWS_PROFILE":             ProfileName,
+		"AWS_REGION":              cfg.AWS.BedrockRegion,
+		"ANTHROPIC_MODEL":         defaultModel.AIPARN,
+	}
+	overrides := map[string]string{}
+	available := []string{}
+
+	for _, tier := range tiers {
+		m, ok := cfg.model(tier)
+		if !ok {
+			continue
+		}
+
+		env["ANTHROPIC_DEFAULT_"+strings.ToUpper(tier)+"_MODEL"] = m.AIPARN
+		overrides[m.AnthropicModelID] = m.AIPARN
+
+		available = append(available, tier)
+	}
 
 	return map[string]any{
-		"awsAuthRefresh": "aws sso login --profile " + ProfileName,
-		"env": map[string]string{
-			"CLAUDE_CODE_USE_BEDROCK":        "1",
-			"AWS_PROFILE":                    ProfileName,
-			"AWS_REGION":                     cfg.AWS.BedrockRegion,
-			"ANTHROPIC_MODEL":                sonnet.AIPARN,
-			"ANTHROPIC_DEFAULT_SONNET_MODEL": sonnet.AIPARN,
-			"ANTHROPIC_DEFAULT_HAIKU_MODEL":  haiku.AIPARN,
-		},
-		"modelOverrides": map[string]string{
-			sonnet.AnthropicModelID: sonnet.AIPARN,
-			haiku.AnthropicModelID:  haiku.AIPARN,
-		},
-		"availableModels":        []string{TierSonnet, TierHaiku},
+		"awsAuthRefresh":         "aws sso login --profile " + ProfileName,
+		"env":                    env,
+		"modelOverrides":         overrides,
+		"availableModels":        available,
 		"enforceAvailableModels": true,
 	}
 }

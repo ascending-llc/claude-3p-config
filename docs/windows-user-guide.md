@@ -46,7 +46,7 @@ If your organization added connectors such as `jarvis-registry`, open **Customiz
 
 ## 5. Use Claude Code
 
-Open a **new** terminal and run `claude`. The first request runs `aws sso login --profile CCWB` and opens your browser. Run `/status` and check for `API provider: Amazon Bedrock`, your Sonnet AIP as the model, and a managed settings source from the registry.
+Open a **new** terminal and run `claude`. The first request runs `aws sso login --profile CCWB` and opens your browser. Run `/status` and check for `API provider: Amazon Bedrock`, the ARN of your organization's default model AIP (usually Sonnet) as the model, and a managed settings source from the registry.
 
 As on macOS, every Claude Code session for this machine now uses Bedrock, and AWS credentials set as environment variables take precedence over the `CCWB` profile.
 

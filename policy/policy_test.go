@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 	"unicode/utf16"
@@ -201,11 +202,105 @@ func TestDesktopSettingsDefaults(t *testing.T) {
 	}
 
 	want := []desktopModel{
-		{Name: cfg.model(TierSonnet).AIPARN, LabelOverride: "Sonnet", AnthropicFamilyTier: TierSonnet},
-		{Name: cfg.model(TierHaiku).AIPARN, LabelOverride: "Haiku", AnthropicFamilyTier: TierHaiku},
+		{Name: cfg.Models[0].AIPARN, LabelOverride: "Sonnet", AnthropicFamilyTier: TierSonnet},
+		{Name: cfg.Models[2].AIPARN, LabelOverride: "Opus", AnthropicFamilyTier: TierOpus},
+		{Name: cfg.Models[1].AIPARN, LabelOverride: "Haiku", AnthropicFamilyTier: TierHaiku},
 	}
-	if len(models) != 2 || models[0] != want[0] || models[1] != want[1] {
+	if !slices.Equal(models, want) {
 		t.Errorf("inferenceModels = %+v, want %+v", models, want)
+	}
+}
+
+func TestDefaultTierAndOptionalOpus(t *testing.T) {
+	tests := []struct {
+		name          string
+		defaultTier   string
+		wantDefault   string
+		wantDesktop   []string
+		wantAvailable []string
+		withoutOpus   bool
+	}{
+		{
+			name:          "sonnet by default",
+			wantDesktop:   []string{TierSonnet, TierOpus, TierHaiku},
+			wantDefault:   TierSonnet,
+			wantAvailable: []string{TierOpus, TierSonnet, TierHaiku},
+		},
+		{
+			name:          "opus as default",
+			defaultTier:   TierOpus,
+			wantDesktop:   []string{TierOpus, TierSonnet, TierHaiku},
+			wantDefault:   TierOpus,
+			wantAvailable: []string{TierOpus, TierSonnet, TierHaiku},
+		},
+		{
+			name:          "without opus",
+			withoutOpus:   true,
+			wantDesktop:   []string{TierSonnet, TierHaiku},
+			wantDefault:   TierSonnet,
+			wantAvailable: []string{TierSonnet, TierHaiku},
+		},
+		{
+			name:          "haiku as default without opus",
+			defaultTier:   TierHaiku,
+			withoutOpus:   true,
+			wantDesktop:   []string{TierHaiku, TierSonnet},
+			wantDefault:   TierHaiku,
+			wantAvailable: []string{TierSonnet, TierHaiku},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg, err := Load(validConfig, Options{})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			cfg.DefaultTier = tt.defaultTier
+			if tt.withoutOpus {
+				cfg.Models = cfg.Models[:2]
+			}
+
+			desktop, err := desktopSettings(cfg)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			var models []desktopModel
+			if err := json.Unmarshal([]byte(desktop["inferenceModels"]), &models); err != nil {
+				t.Fatal(err)
+			}
+
+			gotTiers := make([]string, 0, len(models))
+			for _, m := range models {
+				gotTiers = append(gotTiers, m.AnthropicFamilyTier)
+			}
+
+			if !slices.Equal(gotTiers, tt.wantDesktop) {
+				t.Errorf("Desktop tiers = %v, want %v", gotTiers, tt.wantDesktop)
+			}
+
+			settings := claudeCodeSettings(cfg)
+			env, _ := settings["env"].(map[string]string)
+			wantModel, _ := cfg.model(tt.wantDefault)
+
+			if env["ANTHROPIC_MODEL"] != wantModel.AIPARN {
+				t.Errorf("ANTHROPIC_MODEL = %q, want the %s AIP", env["ANTHROPIC_MODEL"], tt.wantDefault)
+			}
+
+			if _, ok := env["ANTHROPIC_DEFAULT_OPUS_MODEL"]; ok == tt.withoutOpus {
+				t.Errorf("ANTHROPIC_DEFAULT_OPUS_MODEL set = %v, want %v", ok, !tt.withoutOpus)
+			}
+
+			if got, _ := settings["availableModels"].([]string); !slices.Equal(got, tt.wantAvailable) {
+				t.Errorf("availableModels = %v, want %v", got, tt.wantAvailable)
+			}
+
+			if got, _ := settings["modelOverrides"].(map[string]string); len(got) != len(tt.wantAvailable) {
+				t.Errorf("modelOverrides = %v, want one entry per configured tier", got)
+			}
+		})
 	}
 }
 
@@ -219,9 +314,18 @@ func TestParseRejectsInvalidConfig(t *testing.T) {
 		{name: "bad region", mutate: func(c *Config) { c.AWS.SSORegion = "useast1" }, wantErr: []string{"aws.sso_region: must be an AWS region name"}},
 		{name: "http start URL", mutate: func(c *Config) { c.AWS.SSOStartURL = "http://example.awsapps.com/start" }, wantErr: []string{"aws.sso_start_url: must be an https URL"}},
 		{name: "role name with space", mutate: func(c *Config) { c.AWS.SSORoleName = "Claude User" }, wantErr: []string{"aws.sso_role_name: must be a permission set name"}},
-		{name: "one model", mutate: func(c *Config) { c.Models = c.Models[:1] }, wantErr: []string{"models: must list exactly two models"}},
-		{name: "duplicate tier", mutate: func(c *Config) { c.Models[1].Tier = TierSonnet }, wantErr: []string{`models[1].tier: "sonnet" is listed more than once`}},
-		{name: "unknown tier", mutate: func(c *Config) { c.Models[0].Tier = "opus" }, wantErr: []string{`models[0].tier: must be "sonnet" or "haiku"`}},
+		{name: "no haiku model", mutate: func(c *Config) { c.Models = c.Models[:1] }, wantErr: []string{"models: must include a haiku model"}},
+		{name: "duplicate tier", mutate: func(c *Config) { c.Models[1].Tier = TierSonnet }, wantErr: []string{`models[1].tier: "sonnet" is listed more than once`, "models: must include a haiku model"}},
+		{name: "unknown tier", mutate: func(c *Config) { c.Models[0].Tier = "fable" }, wantErr: []string{`models[0].tier: must be "opus", "sonnet" or "haiku"`}},
+		{
+			name: "default tier without its model",
+			mutate: func(c *Config) {
+				c.Models = c.Models[:2]
+				c.DefaultTier = TierOpus
+			},
+			wantErr: []string{`default_tier: must be the tier of a configured model, got "opus"`},
+		},
+		{name: "unknown default tier", mutate: func(c *Config) { c.DefaultTier = "Sonnet" }, wantErr: []string{`default_tier: must be the tier of a configured model, got "Sonnet"`}},
 		{
 			name:    "system inference profile instead of an AIP",
 			mutate:  func(c *Config) { c.Models[0].AIPARN = "us.anthropic.claude-sonnet-5" },
@@ -341,7 +445,7 @@ func TestPlaceholders(t *testing.T) {
 		t.Fatal("example config loaded without AllowPlaceholders")
 	}
 
-	for _, field := range []string{"aws.account_id", "aws.sso_start_url", "aws.sso_role_name", "models[0].aip_arn", "models[1].aip_arn", "desktop.mcp_servers[0].url"} {
+	for _, field := range []string{"aws.account_id", "aws.sso_start_url", "aws.sso_role_name", "models[0].aip_arn", "models[1].aip_arn", "models[2].aip_arn", "desktop.mcp_servers[0].url"} {
 		if !strings.Contains(err.Error(), field+": replace the placeholder") {
 			t.Errorf("error does not flag %s:\n%s", field, err.Error())
 		}
