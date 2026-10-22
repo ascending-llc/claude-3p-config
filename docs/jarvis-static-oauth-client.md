@@ -62,7 +62,7 @@ On 2026-10-22, on the Windows machine above, with WSL2 still on and 53280 still 
 2. The Desktop policy was set to that `clientId`, `callbackPort` 47280, `scope` `mcp-proxy-ops` and `authorizationServer` `["https://<jarvis-host>"]`.
 3. **Connect** completed the Entra sign-in in the browser, and the connector's tools worked.
 
-That test client lives in Redis like any dynamically registered client. It proves the flow but isn't a deployment target: if it's removed, every device's connector stops working. Delete it once the static client exists.
+That test client lives in Redis like any dynamically registered client, and it expires on its own after about a month, around 2026-11-22. It proves the flow but isn't a deployment target: when it expires, every device whose policy uses it loses the connector until the policy is redeployed with a new client ID.
 
 ### The server's metadata at the time of the test
 
@@ -77,7 +77,7 @@ From `https://<jarvis-host>/.well-known/oauth-protected-resource/gateway/proxy/m
 
 ### Requirements
 
-1. **A static client defined in the server's configuration**, not stored as a dynamic registration in Redis. It must survive restarts, redeploys and Redis flushes, must not expire, and must not be deletable or editable through the registration endpoint or RFC 7592 client management.
+1. **A static client defined in the server's configuration**, not stored as a dynamic registration in Redis. Dynamically registered clients expire after about a month, which suits a per-device registration that can register again but not a client ID baked into device policies. The static client must survive restarts, redeploys and Redis flushes, must not expire, and must not be deletable or editable through the registration endpoint or RFC 7592 client management.
 2. **A stable, non-secret client ID**, the same in every Jarvis Registry deployment, so one policy works for all client companies. A readable value such as `claude-desktop` is fine; it isn't a credential. Changing it later means redeploying the policy to every device.
 3. **A public client.** `token_endpoint_auth_method` `none`: the token endpoint must accept requests from this client without a secret. A secret in a device policy would be readable by anyone with the device, so it would add nothing.
 4. **PKCE required** for this client, with S256. With no secret, PKCE is what stops an intercepted authorization code from being used.
@@ -104,6 +104,6 @@ On a Windows machine with WSL2 or Docker Desktop installed, using a policy gener
 
 ## Rollout
 
-1. Release the Jarvis Registry with the static client and pass the acceptance test.
+1. Release the Jarvis Registry with the static client and pass the acceptance test, before the test client expires around 2026-11-22.
 2. In each deployment's `config/config.json`, set `desktop.mcp_servers[].oauth.client_id` to the static client ID, then regenerate and redeploy the policies (see the [admin guide](admin-guide.md#mcp-connectors-with-oauth)).
-3. Delete the test client registered on 2026-10-22 from Redis.
+3. Let the test client registered on 2026-10-22 expire; no cleanup is needed.
