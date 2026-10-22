@@ -20,6 +20,14 @@ fmt:
 	@pre-commit run --all-files golangci-lint-fmt
 .PHONY: fmt
 
+lint-all:
+	@pre-commit run --all-files
+.PHONY: lint-all
+
+tartufo:
+	@pre-commit run --all-files tartufo
+.PHONY: tartufo
+
 # Render config/config.json into dist/macos and dist/windows.
 policies:
 	@go run ./cmd/ccwb-policy

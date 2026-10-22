@@ -50,6 +50,6 @@ docs/                 admin guide, user guides, test plan
 
 ## Development
 
-Run `pre-commit install -t pre-commit` once, then `make all` (tests and golangci-lint) before each commit. After changing the config schema or rendering, run `make examples` and commit the updated `examples/`; a test fails while they're stale. See [CLAUDE.md](CLAUDE.md) for conventions.
+You also need Python 3.14 for the pre-commit hooks (see `.python-version`). Run `pre-commit install -t pre-commit` once, then `make all` (tests and golangci-lint) before each commit. After changing the config schema or rendering, run `make examples` and commit the updated `examples/`; a test fails while they're stale. See [CLAUDE.md](CLAUDE.md) for conventions.
 
 Upstream inspiration: [guidance-for-claude-code-with-amazon-bedrock](https://github.com/aws-solutions-library-samples/guidance-for-claude-code-with-amazon-bedrock).
