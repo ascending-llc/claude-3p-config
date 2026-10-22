@@ -32,6 +32,8 @@ Then follow the guide for your platform:
 - [macOS user guide](docs/macos-user-guide.md): install and sign in on a Mac
 - [Windows user guide](docs/windows-user-guide.md): install and sign in on Windows
 - [Test plan](docs/test-plan.md): what was tested, and the checklist for new platforms or changes
+- [Jarvis Registry static OAuth client](docs/jarvis-static-oauth-client.md): what the Jarvis Registry MCP server needs for Claude Desktop sign-in
+- [Jarvis Registry static OAuth client](docs/jarvis-static-oauth-client.md): what the Jarvis Registry MCP server needs for Claude Desktop sign-in
 
 Without Go, copy the committed examples in [`examples/`](examples/) and replace each `REPLACE_WITH_` value by hand. The examples are rendered from [`config/config.example.json`](config/config.example.json).
 
@@ -45,7 +47,7 @@ policy/               config validation and rendering of every artifact
 internal/plist/       XML property list encoder for the .mobileconfig
 config/               config.example.json (committed) and config.json (yours, ignored)
 examples/             artifacts rendered from config.example.json
-docs/                 admin guide, user guides, test plan
+docs/                 admin guide, user guides, test plan, Jarvis Registry OAuth brief
 ```
 
 ## Development
