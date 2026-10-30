@@ -29,8 +29,8 @@
   "default_tier": "sonnet",
   "codex": {
     "enabled": true,
-    "default_model": "global.openai.gpt-6.1-sol",
-    "reasoning_effort": "high"
+    "default_model": "global.openai.gpt-6.1-terra",
+    "reasoning_effort": "medium"
   },
   "desktop": {
     "mcp_servers": [

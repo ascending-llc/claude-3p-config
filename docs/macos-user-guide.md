@@ -1,6 +1,6 @@
 # macOS user guide
 
-This sets up Claude Desktop, the Claude Code CLI and optionally local Codex clients on your Mac to use your organization's models on Amazon Bedrock. You sign in with your organization account through AWS IAM Identity Center. Nothing is installed except configuration profiles and a few lines in `~/.aws/config`.
+This sets up Claude Desktop, the Claude Code CLI or OpenAI Desktop, Codex clients on your Mac to use your organization's models on Amazon Bedrock. You sign in with your organization account through AWS IAM Identity Center. Nothing is installed except configuration profiles and a few lines in `~/.aws/config`.
 
 You need two files from whoever maintains your organization's configuration, or from `dist/macos/` if you generated them yourself:
 
