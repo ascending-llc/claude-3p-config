@@ -8,6 +8,7 @@ Run this on each new platform, and again after changing the config schema or the
 | --- | --- | --- | --- |
 | macOS 26.7.1 | 2026-10-21 | Claude Desktop 2.26454.2, Claude Code 2.1.306, AWS CLI 2.37.12 | All passed, with the administrator permission set. Sonnet and Haiku only: the Opus tier and `default_tier` were added later and are untested. D4 passed with automatic client registration; re-run it with the pre-registered client and callback port 47280 |
 | Windows 10 Home 22H2 (19045) | 2026-10-22 | Claude Desktop 3.1623.4 (Microsoft Store), Claude Code 2.1.308, AWS CLI 2.38.4 | All passed, with the administrator permission set and WSL2 installed. Sonnet and Haiku only. D4 failed with automatic client registration (port 53280 reserved by WSL2), then passed with a pre-registered client and callback port 47280 |
+| macOS (Codex direct Runtime check) | 2026-10-30 | Codex 0.165.0-alpha.1.2 | Global GPT-6 Luna, GPT-6.1 Sol and GPT-6.1 Terra each returned `bedrock-ok`; 6.1 Sol completed a local `pwd` tool call. `auth_refresh` mechanism verified the same day: on SSO expiry Codex invokes the refresh command and retries. Managed profile installation, the full browser re-login flow and a non-admin employee permission set still require rollout validation |
 
 ## Before you start
 
@@ -40,3 +41,21 @@ Run this on each new platform, and again after changing the config schema or the
 | T10 | In an open session, run `aws sso logout` in another terminal, then send a prompt | `awsAuthRefresh` runs once and the session continues, without a sign-in loop |
 | T11 | Keep Desktop and Claude Code open together; sign out of one | The other keeps working |
 | T12 | Leave both idle past the session durations | Note how often people must sign in again |
+
+## Codex
+
+These are manual configuration-effect checks, not repository automated tests. Run them after distributing the generated managed configuration.
+
+| # | Steps | Pass when |
+| --- | --- | --- |
+| C1 | Install the Codex managed config and requirements, restart the client, open `/status` | Provider is `amazon-bedrock-runtime`; default model and Region match the generated TOML |
+| C2 | In a disposable folder with `--sandbox read-only`, send `Reply with exactly: bedrock-ok` | Exact reply arrives without `OPENAI_API_KEY` or provider errors |
+| C3 | Ask Codex to run read-only `pwd`, then ask a follow-up about the result | Local tool execution and the follow-up turn both work |
+| C4 | Invoke the approved Luna, 6.1 Sol and 6.1 Terra Global or US IDs one at a time | All three complete and AWS logs show the employee's role session |
+| C5 | Start a new local desktop task and a new IDE session after full restart | Both read the same managed provider and can complete the short prompt |
+| C6 | With an ordinary employee role, invoke a fourth model that is already subscribed but not approved | IAM/SCP returns an authorization denial. A Marketplace/subscription error does not prove the model allowlist |
+| C7 | Change user `config.toml` or pass a conflicting provider override | `requirements.toml` keeps the provider on `amazon-bedrock-runtime` |
+| C8 | Remove the Codex profile/files and restart | The managed Bedrock provider no longer applies; user `config.toml`, auth, plugins and projects remain intact |
+| C9 | Let the SSO session expire (or run `aws sso logout --profile CCWB`), then send a new prompt | Codex runs the managed `auth_refresh` command (`aws sso login --profile CCWB`), you complete the browser sign-in, and the request continues without a manual restart |
+
+The platform user guides list the exact copy commands, target paths and troubleshooting rows.

@@ -1,11 +1,13 @@
 # Windows user guide
 
-This sets up Claude Desktop and the Claude Code CLI on Windows to use your organization's Claude models on Amazon Bedrock, signed in through AWS IAM Identity Center.
+This sets up Claude Desktop, the Claude Code CLI and optionally local Codex clients on Windows to use your organization's models on Amazon Bedrock, signed in through AWS IAM Identity Center.
 
 You need two files from whoever maintains your organization's configuration, or from `dist/windows/` if you generated them yourself:
 
 - `Claude-CCWB.reg`: the policies for Claude Desktop and Claude Code
 - `aws-config-CCWB.ini`: the AWS CLI profile Claude Code signs in with
+- `codex-managed-config-CCWB.toml`: optional managed defaults for Codex
+- `codex-requirements-CCWB.toml`: optional system requirement that enforces the Bedrock Runtime provider
 
 If your organization's IT deploys the policies for you through Intune or Group Policy, skip step 2.
 
@@ -50,6 +52,17 @@ Open a **new** terminal and run `claude`. The first request runs `aws sso login 
 
 As on macOS, every Claude Code session for this machine now uses Bedrock, and AWS credentials set as environment variables take precedence over the `CCWB` profile.
 
+## 6. Use Codex with Bedrock
+
+Only do this when your organization has approved Codex on Bedrock. IT should normally distribute these files. For a manual pilot:
+
+1. Copy `codex-managed-config-CCWB.toml` to `%USERPROFILE%\.codex\managed_config.toml`. Preserve any existing managed file and do not overwrite `%USERPROFILE%\.codex\config.toml`.
+2. In an elevated PowerShell, copy `codex-requirements-CCWB.toml` to `%ProgramData%\OpenAI\Codex\requirements.toml`.
+3. Run `aws sso login --profile CCWB` and `aws sts get-caller-identity --profile CCWB`.
+4. Fully restart the ChatGPT/Codex desktop app, CLI and IDE extension. In a new local task, check `/status` for provider `amazon-bedrock-runtime`, then send `Reply with exactly: bedrock-ok`.
+
+When AWS credentials expire, Codex re-runs the SSO sign-in automatically (`auth_refresh`) and continues once you complete it. IAM or an SCP—not the client model picker—enforces the real model allowlist. You do not need to sign out of ChatGPT.
+
 ## Sign out
 
 Sign out in Claude Desktop. For Claude Code, run `aws sso logout`.
@@ -64,6 +77,8 @@ reg delete "HKLM\SOFTWARE\Policies\ClaudeCode" /v Settings /f
 
 For Claude Desktop, delete the values that `Claude-CCWB.reg` lists under `HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Claude`, for example in Registry Editor. Delete the whole key only if nothing else manages Claude Desktop on this machine. Then remove the `[sso-session ccwb]` and `[profile CCWB]` sections from `%USERPROFILE%\.aws\config`.
 
+If Codex was enabled, have IT back up and remove `%USERPROFILE%\.codex\managed_config.toml` and `%ProgramData%\OpenAI\Codex\requirements.toml`, then restart the client. Do not remove the user's `config.toml`, `auth.json`, plugins or project settings.
+
 ## Troubleshooting
 
 Claude Desktop's log is `main.log` in `%LOCALAPPDATA%\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Local\Claude-3p\logs` (the Microsoft Store install). Its messages often explain what the app shows only briefly.
@@ -76,3 +91,5 @@ Claude Desktop's log is `main.log` in `%LOCALAPPDATA%\Packages\Claude_pzs8sxrjxf
 | Claude Code: `AWS authentication failed` | Run `aws sso login --profile CCWB`, then retry. If it persists, ask your administrator to check your permission set |
 | Claude Code: `403 … not authorized … with an explicit deny` | You asked for a model outside your organization's AIPs, for example with `--model`. Use `/model` to pick one of your organization's models |
 | `/status` doesn't list a managed settings source | The policies weren't imported under `HKEY_LOCAL_MACHINE`; repeat step 2 from a terminal opened with **Run as administrator** |
+| Codex `/status` doesn't show `amazon-bedrock-runtime` | Check both TOML paths and fully restart the client |
+| Codex gets `AccessDenied` although STS works | STS proves identity only. Send the model ID, Region, error and Request ID to the AWS administrator; never send credentials |

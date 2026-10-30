@@ -32,6 +32,9 @@ cp config/config.example.json config/config.json
 | `models[].anthropic_model_id` | The Anthropic model ID the AIP routes to (see below) |
 | `models[].label` | Optional name Claude Desktop shows; defaults to the capitalized tier, such as `Sonnet` |
 | `default_tier` | Optional tier both apps start with; defaults to `sonnet`. Must be a configured tier |
+| `codex.enabled` | Optional. Set to `true` to render Codex managed configuration; omitted or `false` keeps the existing Claude-only output |
+| `codex.default_model` | One approved Global or US Geo Runtime inference profile ID for GPT-6 Luna, GPT-6.1 Sol or GPT-6.1 Terra |
+| `codex.reasoning_effort` | `low`, `medium` or `high` |
 | `desktop.mcp_servers[]` | Optional remote MCP servers: `name`, `url` (final https address) and, for a server that needs sign-in, `oauth` |
 | `desktop.mcp_servers[].oauth.client_id` | The public OAuth client registered for Claude Desktop at the server's authorization server (see below) |
 | `desktop.mcp_servers[].oauth.scope` | Optional space-separated scopes Desktop requests. Without it, Desktop requests every scope the server advertises |
@@ -95,9 +98,15 @@ dist/macos/Claude-CCWB.mobileconfig    one profile, two payloads: Claude Desktop
 dist/macos/aws-config-CCWB.ini         ~/.aws/config snippet
 dist/windows/Claude-CCWB.reg           both policies under HKLM
 dist/windows/aws-config-CCWB.ini       same snippet, for %USERPROFILE%\.aws\config
+
+dist/macos/Codex-CCWB.mobileconfig     Codex managed defaults and requirements for macOS MDM
+dist/macos/codex-managed-config-CCWB.toml
+dist/macos/codex-requirements-CCWB.toml
+dist/windows/codex-managed-config-CCWB.toml
+dist/windows/codex-requirements-CCWB.toml
 ```
 
-On a Mac, `plutil -lint dist/macos/Claude-CCWB.mobileconfig` should print `OK`.
+On a Mac, run `plutil -lint` for both `.mobileconfig` files; each should print `OK`.
 
 ## 4. Distribute
 
@@ -106,6 +115,8 @@ The repository doesn't distribute anything. Pick what fits:
 - **Self-install.** Send the `dist/macos` or `dist/windows` folder through a private channel and point people to the [macOS](macos-user-guide.md) or [Windows](windows-user-guide.md) user guide.
 - **MDM on macOS** (Jamf, Kandji, Intune and similar). Upload `Claude-CCWB.mobileconfig` as a custom profile. Both payloads were tested installed per user (`PayloadScope` `User`), so deploy it through the user channel. MDM tools usually sign profiles; a self-installed unsigned profile shows as "Unverified", which is expected. The AWS snippet still has to reach each person's `~/.aws/config`, through a script or the user guide.
 - **Windows management** (Intune, Group Policy). Import `Claude-CCWB.reg` or set the same values. They live under `HKEY_LOCAL_MACHINE`, so this needs administrator rights. Claude Code ignores some managed-only keys in the per-user `HKCU` hive, and Claude Desktop ignores user policy whenever machine policy exists.
+- **Codex on macOS.** Deploy `Codex-CCWB.mobileconfig` through the user channel. It writes Base64 TOML under the `com.openai.codex` preference domain. Without MDM, install the two generated TOML files as `/etc/codex/managed_config.toml` and `/etc/codex/requirements.toml`.
+- **Codex on Windows.** Deploy the managed config as `%USERPROFILE%\.codex\managed_config.toml` and the requirements file as `%ProgramData%\OpenAI\Codex\requirements.toml`. Protect the system requirements file from user edits.
 
 To change models or settings later, update the config, regenerate and reinstall. On macOS the new profile replaces the old one as long as `profile.identifier` hasn't changed.
 
@@ -131,6 +142,8 @@ To change models or settings later, update the config, regenerate and reinstall.
 | `availableModels`, `enforceAvailableModels` | Only the configured tiers' aliases, including for the Default option. Without this, Claude Code's Bedrock default is Opus through a public inference profile, which bypasses your AIPs |
 
 Because these are managed settings, they apply to **every** Claude Code session for that user on that machine, and users can't override them.
+
+**Codex** uses the generated `managed_config.toml` to select `amazon-bedrock-runtime`, the configured default model, reasoning effort, disabled Runtime web search, and an `auth_refresh` command that re-runs `aws sso login --profile CCWB` when credentials expire — the Codex counterpart of Claude Code's `awsAuthRefresh`. The generated `requirements.toml` enforces only the provider. Codex has no supported `allowed_models` requirement, so IAM/SCP must restrict actual model access. See section 4 for the macOS and Windows deployment paths.
 
 ## 6. Sign-in lifetime
 

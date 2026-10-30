@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>PayloadContent</key>
+	<array>
+		<dict>
+			<key>PayloadDisplayName</key>
+			<string>Codex</string>
+			<key>PayloadIdentifier</key>
+			<string>com.example.claude.ccwb.codex.managed</string>
+			<key>PayloadType</key>
+			<string>com.openai.codex</string>
+			<key>PayloadUUID</key>
+			<string>A08CF2CF-76A4-8A75-B89A-1671A258CE36</string>
+			<key>PayloadVersion</key>
+			<integer>1</integer>
+			<key>config_toml_base64</key>
+			<string>bW9kZWxfcHJvdmlkZXIgPSAiYW1hem9uLWJlZHJvY2stcnVudGltZSIKbW9kZWwgPSAiZ2xvYmFsLm9wZW5haS5ncHQtNi4xLXNvbCIKbW9kZWxfcmVhc29uaW5nX2VmZm9ydCA9ICJoaWdoIgp3ZWJfc2VhcmNoID0gImRpc2FibGVkIgoKW21vZGVsX3Byb3ZpZGVycy5hbWF6b24tYmVkcm9jay1ydW50aW1lLmF3c10KcHJvZmlsZSA9ICJDQ1dCIgpyZWdpb24gPSAidXMtZWFzdC0xIgphdXRoX3JlZnJlc2ggPSB7IGNvbW1hbmQgPSAiYXdzIiwgYXJncyA9IFsic3NvIiwgImxvZ2luIiwgIi0tcHJvZmlsZSIsICJDQ1dCIl0sIHRpbWVvdXRfbXMgPSAzMDAwMDAgfQo=</string>
+			<key>requirements_toml_base64</key>
+			<string>bW9kZWxfcHJvdmlkZXIgPSAiYW1hem9uLWJlZHJvY2stcnVudGltZSIK</string>
+		</dict>
+	</array>
+	<key>PayloadDescription</key>
+	<string>Configures Codex to use Amazon Bedrock Runtime through the CCWB AWS profile.</string>
+	<key>PayloadDisplayName</key>
+	<string>Codex on Amazon Bedrock (CCWB)</string>
+	<key>PayloadIdentifier</key>
+	<string>com.example.claude.ccwb.codex</string>
+	<key>PayloadOrganization</key>
+	<string>REPLACE_WITH_ORGANIZATION_NAME</string>
+	<key>PayloadScope</key>
+	<string>User</string>
+	<key>PayloadType</key>
+	<string>Configuration</string>
+	<key>PayloadUUID</key>
+	<string>8B960B53-C50D-885E-9066-5D628A9DC511</string>
+	<key>PayloadVersion</key>
+	<integer>1</integer>
+</dict>
+</plist>

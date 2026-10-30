@@ -3,6 +3,7 @@ package policy
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
@@ -24,6 +25,14 @@ type (
 		Reg []byte
 		// AWSConfig is the ~/.aws/config snippet that defines ProfileName.
 		AWSConfig []byte
+		// CodexMobileconfig is the macOS managed preferences profile for Codex.
+		// It embeds the managed config and requirements TOML as Base64 strings.
+		CodexMobileconfig []byte
+		// CodexManagedConfig selects Bedrock Runtime and the deployment's default
+		// model. Administrators install it as managed_config.toml.
+		CodexManagedConfig []byte
+		// CodexRequirements enforces the Bedrock Runtime provider.
+		CodexRequirements []byte
 	}
 
 	// desktopModel is one entry of Claude Desktop's inferenceModels.
@@ -80,11 +89,27 @@ func Render(cfg Config) (Artifacts, error) {
 		return Artifacts{}, err
 	}
 
-	return Artifacts{
+	artifacts := Artifacts{
 		Mobileconfig: mobileconfig,
 		Reg:          renderReg(desktop, claudeCodeJSON),
 		AWSConfig:    renderAWSConfig(cfg.AWS),
-	}, nil
+	}
+
+	if cfg.codexEnabled() {
+		artifacts.CodexManagedConfig = renderCodexManagedConfig(cfg)
+		artifacts.CodexRequirements = renderCodexRequirements()
+
+		artifacts.CodexMobileconfig, err = renderCodexMobileconfig(
+			cfg.Profile,
+			artifacts.CodexManagedConfig,
+			artifacts.CodexRequirements,
+		)
+		if err != nil {
+			return Artifacts{}, err
+		}
+	}
+
+	return artifacts, nil
 }
 
 // desktopSettings returns Claude Desktop's managed configuration. Every value
@@ -291,6 +316,58 @@ sso_account_id = %s
 sso_role_name = %s
 region = %s
 `, SSOSessionName, a.SSOStartURL, a.SSORegion, ProfileName, SSOSessionName, a.AccountID, a.SSORoleName, a.BedrockRegion))
+}
+
+// renderCodexManagedConfig configures Codex's built-in Bedrock Runtime
+// provider. The nested AWS block avoids relying on process-wide AWS_PROFILE
+// and AWS_REGION environment variables. auth_refresh re-runs the SSO sign-in
+// when credentials expire, mirroring Claude Code's awsAuthRefresh. Verified on
+// Codex 0.165.0-alpha.1.2, which accepts only command = "aws"; the five-minute
+// timeout leaves room for the browser sign-in to complete.
+func renderCodexManagedConfig(cfg Config) []byte {
+	return []byte(fmt.Sprintf(`model_provider = "amazon-bedrock-runtime"
+model = %q
+model_reasoning_effort = %q
+web_search = "disabled"
+
+[model_providers.amazon-bedrock-runtime.aws]
+profile = %q
+region = %q
+auth_refresh = { command = "aws", args = ["sso", "login", "--profile", %q], timeout_ms = 300000 }
+`, cfg.Codex.DefaultModel, cfg.Codex.ReasoningEffort, ProfileName, cfg.AWS.BedrockRegion, ProfileName))
+}
+
+// renderCodexRequirements prevents a user config or command-line override
+// from switching Codex to another provider. Model authorization remains an
+// AWS IAM/SCP responsibility.
+func renderCodexRequirements() []byte {
+	return []byte("model_provider = \"amazon-bedrock-runtime\"\n")
+}
+
+func renderCodexMobileconfig(p Profile, managedConfig, requirements []byte) ([]byte, error) {
+	identifier := p.Identifier + ".codex"
+	codexPayload := payload(identifier+".managed", "com.openai.codex", "Codex")
+	codexPayload["config_toml_base64"] = base64.StdEncoding.EncodeToString(managedConfig)
+	codexPayload["requirements_toml_base64"] = base64.StdEncoding.EncodeToString(requirements)
+
+	profile := map[string]any{
+		"PayloadContent":      []any{codexPayload},
+		"PayloadDescription":  "Configures Codex to use Amazon Bedrock Runtime through the CCWB AWS profile.",
+		"PayloadDisplayName":  "Codex on Amazon Bedrock (CCWB)",
+		"PayloadIdentifier":   identifier,
+		"PayloadOrganization": p.Organization,
+		"PayloadScope":        "User",
+		"PayloadType":         "Configuration",
+		"PayloadUUID":         stableUUID(identifier),
+		"PayloadVersion":      1,
+	}
+
+	out, err := plist.Marshal(profile)
+	if err != nil {
+		return nil, fmt.Errorf("rendering Codex mobileconfig: %s", err.Error())
+	}
+
+	return out, nil
 }
 
 // compactJSON encodes v without HTML escaping, so URLs and ARNs stay readable.
