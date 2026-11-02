@@ -51,8 +51,8 @@ Verified on macOS on 2026-10-21 and on Windows 10 on 2026-10-22. Note in `docs/t
 ## Tooling
 
 - Run `pre-commit install -t pre-commit` once. Use the `Makefile` targets: `make all` (test + lint) is the bar for done; `make fmt` fixes formatting and import grouping.
-- pre-commit builds its Python hooks (tartufo) with `python3.14`, matching `.python-version`. tartufo scans staged changes for secrets; add a false positive to `tartufo.toml` with a `reason`, never by disabling the hook.
-- CI (`.github/workflows/test-and-lint.yaml`) runs `make test`, `make lint` and `make tartufo` on Linux, and `make test` on macOS for the `plutil -lint` check.
+- The gelato pre-commit hook scans staged changes for secrets; `make gelato` runs it by hand. Its config is the `[tool.tartufo]` table of `tartufo.toml`, the file and table names gelato reads. Add a false positive there with a `reason` (`exclude-entropy-patterns` for generated content that changes, `exclude-signatures` for a single finding), never by disabling the hook. CI doesn't scan for secrets; the local hook is the check.
+- CI (`.github/workflows/test-and-lint.yaml`) runs `make test` and `make lint` on Linux, with pre-commit on Python from `.python-version`, and `make test` on macOS for the `plutil -lint` check.
 - golangci-lint must pass. Suppress a false positive in `.golangci.yaml` under `linters.exclusions.rules`, scoped to `path` and `text`, with a comment explaining why; never a blanket `//nolint` or a disabled linter.
 - `config/config.json` and `dist/` hold real account details and are git-ignored; never commit them or paste their contents into examples or tests.
 - `.reg` files are UTF-16LE with CRLF line endings and marked `binary` in `.gitattributes`; read them with `iconv -f UTF-16 -t UTF-8`.

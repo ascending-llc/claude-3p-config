@@ -5,7 +5,7 @@ entropy = true
 
 exclude-path-patterns = [
     {path-pattern = 'go\.mod$', reason = 'go.mod file'},
-    {path-pattern = 'tartufo\.toml$', reason = 'Tartufo config file'},
+    {path-pattern = 'tartufo\.toml$', reason = 'gelato config file'},
 ]
 
 exclude-entropy-patterns = [

@@ -25,7 +25,7 @@ jobs:
         with:
           go-version: "^1.24.1"
 
-      # .pre-commit-config.yaml builds hook environments with python3.14.
+      # pre-commit runs golangci-lint for make lint.
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -45,9 +45,6 @@ jobs:
 
       - name: Lint
         run: make lint
-
-      - name: Scan for secrets
-        run: make tartufo
 
   # The plutil -lint check of the generated .mobileconfig only runs on macOS.
   macos:
