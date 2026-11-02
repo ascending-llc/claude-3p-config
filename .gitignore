@@ -4,3 +4,6 @@ coverage.out
 # Generated policies and the real deployment config hold account details.
 /dist/
 /config/config.json
+
+# Links to the reigstry-working-docs local clone
+/.working-docs
