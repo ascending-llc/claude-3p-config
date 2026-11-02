@@ -2,7 +2,7 @@
 
 This sets up Claude Desktop, the Claude Code CLI and optionally local Codex clients on Windows to use your organization's models on Amazon Bedrock, signed in through AWS IAM Identity Center.
 
-You need two files from whoever maintains your organization's configuration, or from `dist/windows/` if you generated them yourself:
+You need these files from whoever maintains your organization's configuration, or from `dist/windows/` if you generated them yourself:
 
 - `Claude-CCWB.reg`: the policies for Claude Desktop and Claude Code
 - `aws-config-CCWB.ini`: the AWS CLI profile Claude Code signs in with

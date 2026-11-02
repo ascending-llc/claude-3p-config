@@ -8,7 +8,8 @@ Run this on each new platform, and again after changing the config schema or the
 | --- | --- | --- | --- |
 | macOS 26.7.1 | 2026-10-21 | Claude Desktop 2.26454.2, Claude Code 2.1.306, AWS CLI 2.37.12 | All passed, with the administrator permission set. Sonnet and Haiku only: the Opus tier and `default_tier` were added later and are untested. D4 passed with automatic client registration; re-run it with the pre-registered client and callback port 47280 |
 | Windows 10 Home 22H2 (19045) | 2026-10-22 | Claude Desktop 3.1623.4 (Microsoft Store), Claude Code 2.1.308, AWS CLI 2.38.4 | All passed, with the administrator permission set and WSL2 installed. Sonnet and Haiku only. D4 failed with automatic client registration (port 53280 reserved by WSL2), then passed with a pre-registered client and callback port 47280 |
-| macOS (Codex direct Runtime check) | 2026-10-30 | Codex 0.165.0-alpha.1.2 | Global GPT-6 Luna, GPT-6.1 Sol and GPT-6.1 Terra each returned `bedrock-ok`; 6.1 Sol completed a local `pwd` tool call. `auth_refresh` mechanism verified the same day: on SSO expiry Codex invokes the refresh command and retries. Managed profile installation, the full browser re-login flow and a non-admin employee permission set still require rollout validation |
+| macOS (Codex direct Runtime check) | 2026-10-30 | Codex 0.165.0-alpha.1.2 | Global GPT-6 Luna, GPT-6.1 Sol and GPT-6.1 Terra each returned `bedrock-ok`; 6.1 Sol completed a local `pwd` tool call. `auth_refresh` mechanism verified the same day: on SSO expiry Codex invokes the refresh command and retries. This predates moving the provider definition into `requirements.toml`. Untested: installing the Codex profile through MDM in the user scope or the files under `/etc/codex`, C7, C10, and a non-admin employee permission set |
+| Windows (Codex) | — | — | Not tested. No Codex check has run on Windows; run the whole Codex section before rollout |
 
 ## Before you start
 
