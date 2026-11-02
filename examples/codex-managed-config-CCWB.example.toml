@@ -1,3 +1,0 @@
-model = "global.openai.gpt-6.1-terra"
-model_reasoning_effort = "medium"
-web_search = "disabled"

@@ -26,15 +26,12 @@ type (
 		// AWSConfig is the ~/.aws/config snippet that defines ProfileName.
 		AWSConfig []byte
 		// CodexMobileconfig is the macOS managed preferences profile for Codex.
-		// It embeds the managed config and requirements TOML as Base64 strings.
+		// It embeds CodexRequirements as a Base64 string.
 		CodexMobileconfig []byte
-		// CodexManagedConfig sets the deployment's default model and reasoning
-		// effort, which users can change. Administrators install it as
-		// managed_config.toml.
-		CodexManagedConfig []byte
 		// CodexRequirements enforces the Bedrock Runtime provider, its AWS
-		// profile, Region and sign-in refresh, and disabled web search.
-		// Administrators install it as requirements.toml.
+		// profile, Region and sign-in refresh, and disabled web search, and
+		// sets the default model and reasoning effort for new threads, which
+		// users can change. Administrators install it as requirements.toml.
 		CodexRequirements []byte
 	}
 
@@ -99,14 +96,9 @@ func Render(cfg Config) (Artifacts, error) {
 	}
 
 	if cfg.codexEnabled() {
-		artifacts.CodexManagedConfig = renderCodexManagedConfig(*cfg.Codex)
-		artifacts.CodexRequirements = renderCodexRequirements(cfg.AWS)
+		artifacts.CodexRequirements = renderCodexRequirements(cfg.AWS, *cfg.Codex)
 
-		artifacts.CodexMobileconfig, err = renderCodexMobileconfig(
-			cfg.Profile,
-			artifacts.CodexManagedConfig,
-			artifacts.CodexRequirements,
-		)
+		artifacts.CodexMobileconfig, err = renderCodexMobileconfig(cfg.Profile, artifacts.CodexRequirements)
 		if err != nil {
 			return Artifacts{}, err
 		}
@@ -321,29 +313,23 @@ region = %s
 `, SSOSessionName, a.SSOStartURL, a.SSORegion, ProfileName, SSOSessionName, a.AccountID, a.SSORoleName, a.BedrockRegion))
 }
 
-// renderCodexManagedConfig sets the starting model and reasoning effort.
-// Codex applies these managed defaults at launch, but users can change them
-// during a session, so everything that must hold lives in the requirements.
-// web_search is set here too because Codex rejects a default that the
-// requirements don't allow.
-func renderCodexManagedConfig(c Codex) []byte {
-	return []byte(fmt.Sprintf(`model = %q
-model_reasoning_effort = %q
-web_search = "disabled"
-`, c.DefaultModel, c.ReasoningEffort))
-}
-
 // renderCodexRequirements pins Codex to its built-in Bedrock Runtime provider
 // and replaces any user definition of that provider, so neither config.toml
 // nor a command-line override can switch provider, AWS profile or Region.
 // Hosted web search isn't available on Bedrock Runtime, so it is allowed only
-// as disabled. Model authorization remains an AWS IAM/SCP responsibility.
+// as disabled, which also makes disabled the default. Model authorization
+// remains an AWS IAM/SCP responsibility.
+//
+// [models.new_thread] sets the starting model and reasoning effort. Unlike the
+// rest of the file it isn't enforced: the CLI and the ChatGPT app apply it to
+// new threads unless the user picks another model. It lives here, not in
+// managed_config.toml, because Codex ignores managed_config.toml on Windows.
 //
 // auth_refresh re-runs the SSO sign-in when credentials expire, like Claude
 // Code's awsAuthRefresh. Codex accepts only command = "aws", runs it without a
 // shell and looks it up on its own PATH; the five-minute timeout leaves room
 // for the browser sign-in.
-func renderCodexRequirements(a AWS) []byte {
+func renderCodexRequirements(a AWS, c Codex) []byte {
 	return []byte(fmt.Sprintf(`model_provider = "amazon-bedrock-runtime"
 allowed_web_search_modes = ["disabled"]
 
@@ -351,13 +337,16 @@ allowed_web_search_modes = ["disabled"]
 profile = %q
 region = %q
 auth_refresh = { command = "aws", args = ["sso", "login", "--profile", %q], timeout_ms = 300000 }
-`, ProfileName, a.BedrockRegion, ProfileName))
+
+[models.new_thread]
+model = %q
+model_reasoning_effort = %q
+`, ProfileName, a.BedrockRegion, ProfileName, c.DefaultModel, c.ReasoningEffort))
 }
 
-func renderCodexMobileconfig(p Profile, managedConfig, requirements []byte) ([]byte, error) {
+func renderCodexMobileconfig(p Profile, requirements []byte) ([]byte, error) {
 	identifier := p.Identifier + ".codex"
 	codexPayload := payload(identifier+".managed", "com.openai.codex", "Codex")
-	codexPayload["config_toml_base64"] = base64.StdEncoding.EncodeToString(managedConfig)
 	codexPayload["requirements_toml_base64"] = base64.StdEncoding.EncodeToString(requirements)
 
 	profile := map[string]any{

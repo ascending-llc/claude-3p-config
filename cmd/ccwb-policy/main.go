@@ -93,10 +93,9 @@ func outputs(a policy.Artifacts, example bool) []output {
 			{"aws-config-CCWB.example.ini", a.AWSConfig},
 		}
 
-		if len(a.CodexManagedConfig) > 0 {
+		if len(a.CodexRequirements) > 0 {
 			out = append(out,
 				output{"Codex-CCWB.example.mobileconfig", a.CodexMobileconfig},
-				output{"codex-managed-config-CCWB.example.toml", a.CodexManagedConfig},
 				output{"codex-requirements-CCWB.example.toml", a.CodexRequirements},
 			)
 		}
@@ -111,12 +110,10 @@ func outputs(a policy.Artifacts, example bool) []output {
 		{filepath.Join("windows", "aws-config-CCWB.ini"), a.AWSConfig},
 	}
 
-	if len(a.CodexManagedConfig) > 0 {
+	if len(a.CodexRequirements) > 0 {
 		out = append(out,
 			output{filepath.Join("macos", "Codex-CCWB.mobileconfig"), a.CodexMobileconfig},
-			output{filepath.Join("macos", "codex-managed-config-CCWB.toml"), a.CodexManagedConfig},
 			output{filepath.Join("macos", "codex-requirements-CCWB.toml"), a.CodexRequirements},
-			output{filepath.Join("windows", "codex-managed-config-CCWB.toml"), a.CodexManagedConfig},
 			output{filepath.Join("windows", "codex-requirements-CCWB.toml"), a.CodexRequirements},
 		)
 	}

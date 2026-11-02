@@ -33,12 +33,11 @@ func TestRenderMatchesGolden(t *testing.T) {
 	}
 
 	for name, got := range map[string][]byte{
-		"Claude-CCWB.mobileconfig":       artifacts.Mobileconfig,
-		"Claude-CCWB.reg":                artifacts.Reg,
-		"aws-config-CCWB.ini":            artifacts.AWSConfig,
-		"Codex-CCWB.mobileconfig":        artifacts.CodexMobileconfig,
-		"codex-managed-config-CCWB.toml": artifacts.CodexManagedConfig,
-		"codex-requirements-CCWB.toml":   artifacts.CodexRequirements,
+		"Claude-CCWB.mobileconfig":     artifacts.Mobileconfig,
+		"Claude-CCWB.reg":              artifacts.Reg,
+		"aws-config-CCWB.ini":          artifacts.AWSConfig,
+		"Codex-CCWB.mobileconfig":      artifacts.CodexMobileconfig,
+		"codex-requirements-CCWB.toml": artifacts.CodexRequirements,
 	} {
 		path := filepath.Join("testdata", "golden", name)
 		if *update {
@@ -156,24 +155,22 @@ func TestCodexMobileconfigIsValidProfile(t *testing.T) {
 		t.Errorf("PayloadScope = %q, want User", profile.PayloadScope)
 	}
 
-	// Codex decodes each key as Base64 TOML; it must round-trip to the files
-	// that Windows and non-MDM macOS installs use.
-	for key, want := range map[string][]byte{
-		"config_toml_base64":       artifacts.CodexManagedConfig,
-		"requirements_toml_base64": artifacts.CodexRequirements,
-	} {
-		encoded, _ := profile.PayloadContent[0][key].(string)
+	// Codex decodes the key as Base64 TOML; it must round-trip to the file
+	// that Windows and non-MDM macOS installs use. config_toml_base64 would
+	// carry the legacy managed config, which this generator no longer writes.
+	if _, ok := profile.PayloadContent[0]["config_toml_base64"]; ok {
+		t.Error("payload has config_toml_base64; the defaults belong in the requirements")
+	}
 
-		got, err := base64.StdEncoding.DecodeString(encoded)
-		if err != nil {
-			t.Errorf("%s: %s", key, err.Error())
+	encoded, _ := profile.PayloadContent[0]["requirements_toml_base64"].(string)
 
-			continue
-		}
+	got, decodeErr := base64.StdEncoding.DecodeString(encoded)
+	if decodeErr != nil {
+		t.Fatalf("requirements_toml_base64: %s", decodeErr.Error())
+	}
 
-		if !bytes.Equal(got, want) {
-			t.Errorf("%s decodes to\n%s\nwant\n%s", key, got, want)
-		}
+	if !bytes.Equal(got, artifacts.CodexRequirements) {
+		t.Errorf("requirements_toml_base64 decodes to\n%s\nwant\n%s", got, artifacts.CodexRequirements)
 	}
 }
 
@@ -202,7 +199,7 @@ func TestRenderOmitsCodexUnlessEnabled(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if artifacts.CodexMobileconfig != nil || artifacts.CodexManagedConfig != nil || artifacts.CodexRequirements != nil {
+			if artifacts.CodexMobileconfig != nil || artifacts.CodexRequirements != nil {
 				t.Error("rendered Codex artifacts although Codex is not enabled")
 			}
 		})

@@ -99,10 +99,8 @@ dist/macos/aws-config-CCWB.ini         ~/.aws/config snippet
 dist/windows/Claude-CCWB.reg           both policies under HKLM
 dist/windows/aws-config-CCWB.ini       same snippet, for %USERPROFILE%\.aws\config
 
-dist/macos/Codex-CCWB.mobileconfig     Codex managed defaults and requirements for macOS MDM
-dist/macos/codex-managed-config-CCWB.toml
+dist/macos/Codex-CCWB.mobileconfig     the Codex requirements, for macOS MDM
 dist/macos/codex-requirements-CCWB.toml
-dist/windows/codex-managed-config-CCWB.toml
 dist/windows/codex-requirements-CCWB.toml
 ```
 
@@ -115,8 +113,8 @@ The repository doesn't distribute anything. Pick what fits:
 - **Self-install.** Send the `dist/macos` or `dist/windows` folder through a private channel and point people to the [macOS](macos-user-guide.md) or [Windows](windows-user-guide.md) user guide.
 - **MDM on macOS** (Jamf, Kandji, Intune and similar). Upload `Claude-CCWB.mobileconfig` as a custom profile. Both payloads were tested installed per user (`PayloadScope` `User`), so deploy it through the user channel. MDM tools usually sign profiles; a self-installed unsigned profile shows as "Unverified", which is expected. The AWS snippet still has to reach each person's `~/.aws/config`, through a script or the user guide.
 - **Windows management** (Intune, Group Policy). Import `Claude-CCWB.reg` or set the same values. They live under `HKEY_LOCAL_MACHINE`, so this needs administrator rights. Claude Code ignores some managed-only keys in the per-user `HKCU` hive, and Claude Desktop ignores user policy whenever machine policy exists.
-- **Codex on macOS.** Deploy `Codex-CCWB.mobileconfig` through the user channel. It writes Base64 TOML under the `com.openai.codex` preference domain. Without MDM, install the two generated TOML files as `/etc/codex/managed_config.toml` and `/etc/codex/requirements.toml`.
-- **Codex on Windows.** Deploy the managed config as `%USERPROFILE%\.codex\managed_config.toml` and the requirements file as `%ProgramData%\OpenAI\Codex\requirements.toml`. Protect the system requirements file from user edits.
+- **Codex on macOS.** Deploy `Codex-CCWB.mobileconfig` through the user channel. It writes the requirements as Base64 TOML (`requirements_toml_base64`) under the `com.openai.codex` preference domain. Without MDM, install `codex-requirements-CCWB.toml` as `/etc/codex/requirements.toml`.
+- **Codex on Windows.** Deploy `codex-requirements-CCWB.toml` as `%ProgramData%\OpenAI\Codex\requirements.toml`, writable only by administrators. Codex has no registry or Group Policy settings, so use Intune, Group Policy file deployment or a similar tool.
 
 To change models or settings later, update the config, regenerate and reinstall. On macOS the new profile replaces the old one as long as `profile.identifier` hasn't changed.
 
@@ -143,10 +141,12 @@ To change models or settings later, update the config, regenerate and reinstall.
 
 Because these are managed settings, they apply to **every** Claude Code session for that user on that machine, and users can't override them.
 
-**Codex** gets two files, delivered together:
+**Codex** gets one file, `requirements.toml`:
 
-- `requirements.toml` is enforced; users can't override it. It pins the built-in `amazon-bedrock-runtime` provider and replaces any user definition of it with the `CCWB` profile, the Bedrock Region, and an `auth_refresh` command that re-runs `aws sso login --profile CCWB` when credentials expire, the Codex counterpart of Claude Code's `awsAuthRefresh`. It also allows web search only as `disabled`, since hosted web search isn't available on Bedrock Runtime.
-- `managed_config.toml` holds starting values: the default model and reasoning effort. Codex applies them at launch, but users can change model and effort during a session.
+- **Enforced; users can't override it:** it pins the built-in `amazon-bedrock-runtime` provider and replaces any user definition of it with the `CCWB` profile, the Bedrock Region, and an `auth_refresh` command that re-runs `aws sso login --profile CCWB` when credentials expire, the Codex counterpart of Claude Code's `awsAuthRefresh`. It also allows web search only as `disabled`, since hosted web search isn't available on Bedrock Runtime.
+- **Starting values; users can change them:** `[models.new_thread]` sets `codex.default_model` and `codex.reasoning_effort`. The CLI and the ChatGPT app apply them to each new thread unless the user picks another model.
+
+The generator doesn't write `managed_config.toml`, Codex's older file for defaults: Codex ignores it on Windows, and its own documentation describes it as being phased out in favor of `requirements.toml`.
 
 Codex runs `auth_refresh` without a shell and only accepts the bare command `aws`, so the AWS CLI must be on the `PATH` that Codex itself sees:
 

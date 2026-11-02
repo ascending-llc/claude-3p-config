@@ -1,3 +1,0 @@
-model = "us.openai.gpt-6.1-sol"
-model_reasoning_effort = "high"
-web_search = "disabled"
