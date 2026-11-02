@@ -9,7 +9,6 @@ A change to the config schema or to any rendered key isn't done until all of the
 - `config/config.example.json`, then `make examples` to re-render `examples/` (`TestExamplesAreCurrent` fails while they're stale)
 - `policy/testdata/valid.json` and the golden files: `go test ./policy -update`, then review the golden diff before committing
 - `docs/admin-guide.md` (field table and "What the policies set"), the user guides, and `docs/test-plan.md` if behavior people check changes
-- The Codex artifacts have no golden files or validation-table entries (the AS-1938 no-automated-tests decision); `TestExamplesAreCurrent` still covers the committed Codex examples.
 
 `ProfileName` (`CCWB`) and `SSOSessionName` (`ccwb`) are shared by the Claude Code policy, the Codex managed config and the AWS snippet; never change one without the other.
 

@@ -8,6 +8,10 @@ exclude-path-patterns = [
     {path-pattern = 'tartufo\.toml$', reason = 'Tartufo config file'},
 ]
 
+exclude-entropy-patterns = [
+    {pattern = '^\s*<string>[A-Za-z0-9+/]+=*</string>$', path-pattern = 'Codex-CCWB(\.example)?\.mobileconfig$', reason = 'Base64 of the generated Codex TOML, decoded and compared to the TOML files by TestCodexMobileconfigIsValidProfile'},
+]
+
 exclude-signatures = [
     # {signature = "hash value", reason = "false positive of high entropy in <***>"},
 ]

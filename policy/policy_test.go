@@ -2,6 +2,7 @@ package policy
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
 	"flag"
@@ -32,9 +33,12 @@ func TestRenderMatchesGolden(t *testing.T) {
 	}
 
 	for name, got := range map[string][]byte{
-		"Claude-CCWB.mobileconfig": artifacts.Mobileconfig,
-		"Claude-CCWB.reg":          artifacts.Reg,
-		"aws-config-CCWB.ini":      artifacts.AWSConfig,
+		"Claude-CCWB.mobileconfig":       artifacts.Mobileconfig,
+		"Claude-CCWB.reg":                artifacts.Reg,
+		"aws-config-CCWB.ini":            artifacts.AWSConfig,
+		"Codex-CCWB.mobileconfig":        artifacts.CodexMobileconfig,
+		"codex-managed-config-CCWB.toml": artifacts.CodexManagedConfig,
+		"codex-requirements-CCWB.toml":   artifacts.CodexRequirements,
 	} {
 		path := filepath.Join("testdata", "golden", name)
 		if *update {
@@ -111,6 +115,97 @@ func TestMobileconfigIsValidProfile(t *testing.T) {
 	env, ok := claudeCode["env"].(map[string]any)
 	if !ok || env["AWS_PROFILE"] != ProfileName {
 		t.Errorf("Claude Code env = %v, want AWS_PROFILE %s", claudeCode["env"], ProfileName)
+	}
+}
+
+func TestCodexMobileconfigIsValidProfile(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("plutil is only available on macOS")
+	}
+
+	artifacts := mustRender(t, validConfig)
+	path := filepath.Join(t.TempDir(), "codex.mobileconfig")
+
+	if err := os.WriteFile(path, artifacts.CodexMobileconfig, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if out, err := exec.Command("plutil", "-lint", path).CombinedOutput(); err != nil {
+		t.Fatalf("plutil -lint: %s: %s", err.Error(), out)
+	}
+
+	out, err := exec.Command("plutil", "-convert", "json", "-o", "-", path).Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var profile struct {
+		PayloadScope   string           `json:"PayloadScope"`
+		PayloadContent []map[string]any `json:"PayloadContent"`
+	}
+
+	if err := json.Unmarshal(out, &profile); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(profile.PayloadContent) != 1 || profile.PayloadContent[0]["PayloadType"] != "com.openai.codex" {
+		t.Fatalf("PayloadContent = %v, want one com.openai.codex payload", profile.PayloadContent)
+	}
+
+	if profile.PayloadScope != "User" {
+		t.Errorf("PayloadScope = %q, want User", profile.PayloadScope)
+	}
+
+	// Codex decodes each key as Base64 TOML; it must round-trip to the files
+	// that Windows and non-MDM macOS installs use.
+	for key, want := range map[string][]byte{
+		"config_toml_base64":       artifacts.CodexManagedConfig,
+		"requirements_toml_base64": artifacts.CodexRequirements,
+	} {
+		encoded, _ := profile.PayloadContent[0][key].(string)
+
+		got, err := base64.StdEncoding.DecodeString(encoded)
+		if err != nil {
+			t.Errorf("%s: %s", key, err.Error())
+
+			continue
+		}
+
+		if !bytes.Equal(got, want) {
+			t.Errorf("%s decodes to\n%s\nwant\n%s", key, got, want)
+		}
+	}
+}
+
+func TestRenderOmitsCodexUnlessEnabled(t *testing.T) {
+	disabled := false
+
+	tests := []struct {
+		codex *Codex
+		name  string
+	}{
+		{name: "no codex section"},
+		{name: "codex disabled", codex: &Codex{Enabled: &disabled}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg, err := Load(validConfig, Options{})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			cfg.Codex = tt.codex
+
+			artifacts, err := Render(cfg)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if artifacts.CodexMobileconfig != nil || artifacts.CodexManagedConfig != nil || artifacts.CodexRequirements != nil {
+				t.Error("rendered Codex artifacts although Codex is not enabled")
+			}
+		})
 	}
 }
 
@@ -403,6 +498,13 @@ func TestParseRejectsInvalidConfig(t *testing.T) {
 		},
 		{name: "privileged callback port", mutate: func(c *Config) { c.Desktop.MCPServers[0].OAuth.CallbackPort = 80 }, wantErr: []string{"desktop.mcp_servers[0].oauth.callback_port: must be between 1024 and 49151"}},
 		{name: "malformed scope", mutate: func(c *Config) { c.Desktop.MCPServers[0].OAuth.Scope = "mcp-proxy-ops  servers-read" }, wantErr: []string{"desktop.mcp_servers[0].oauth.scope: must be space-separated OAuth scopes"}},
+		{name: "codex without enabled", mutate: func(c *Config) { c.Codex.Enabled = nil }, wantErr: []string{"codex.enabled: is required"}},
+		{
+			name:    "codex model that is not an OpenAI inference profile",
+			mutate:  func(c *Config) { c.Codex.DefaultModel = "openai.gpt-6.1-sol" },
+			wantErr: []string{"codex.default_model: must be one of the approved"},
+		},
+		{name: "unknown codex reasoning effort", mutate: func(c *Config) { c.Codex.ReasoningEffort = "hihg" }, wantErr: []string{`codex.reasoning_effort: must be "low", "medium" or "high"`}},
 		{name: "bad identifier", mutate: func(c *Config) { c.Profile.Identifier = "claude" }, wantErr: []string{"profile.identifier: must be a reverse-DNS identifier"}},
 		{name: "empty organization", mutate: func(c *Config) { c.Profile.Organization = " " }, wantErr: []string{"profile.organization: must not be empty"}},
 		{
