@@ -1,6 +1,6 @@
-// Command ccwb-policy renders the Claude Desktop and Claude Code managed
-// policies for macOS and Windows, plus the AWS CLI profile they rely on, from
-// one deployment config. Run it from the repository root.
+// Command ccwb-policy renders the Claude and optional Codex managed policies
+// for macOS and Windows, plus the AWS CLI profile they rely on, from one
+// deployment config. Run it from the repository root.
 package main
 
 import (
@@ -84,20 +84,41 @@ func run(args []string, stdout, stderr io.Writer) int {
 }
 
 func outputs(a policy.Artifacts, example bool) []output {
+	var out []output
+
 	if example {
-		return []output{
+		out = []output{
 			{"Claude-CCWB.example.mobileconfig", a.Mobileconfig},
 			{"Claude-CCWB.example.reg", a.Reg},
 			{"aws-config-CCWB.example.ini", a.AWSConfig},
 		}
+
+		if len(a.CodexRequirements) > 0 {
+			out = append(out,
+				output{"Codex-CCWB.example.mobileconfig", a.CodexMobileconfig},
+				output{"codex-requirements-CCWB.example.toml", a.CodexRequirements},
+			)
+		}
+
+		return out
 	}
 
-	return []output{
+	out = []output{
 		{filepath.Join("macos", "Claude-CCWB.mobileconfig"), a.Mobileconfig},
 		{filepath.Join("macos", "aws-config-CCWB.ini"), a.AWSConfig},
 		{filepath.Join("windows", "Claude-CCWB.reg"), a.Reg},
 		{filepath.Join("windows", "aws-config-CCWB.ini"), a.AWSConfig},
 	}
+
+	if len(a.CodexRequirements) > 0 {
+		out = append(out,
+			output{filepath.Join("macos", "Codex-CCWB.mobileconfig"), a.CodexMobileconfig},
+			output{filepath.Join("macos", "codex-requirements-CCWB.toml"), a.CodexRequirements},
+			output{filepath.Join("windows", "codex-requirements-CCWB.toml"), a.CodexRequirements},
+		)
+	}
+
+	return out
 }
 
 func write(path string, data []byte) error {

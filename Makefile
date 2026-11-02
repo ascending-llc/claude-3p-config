@@ -24,9 +24,10 @@ lint-all:
 	@pre-commit run --all-files
 .PHONY: lint-all
 
-tartufo:
-	@pre-commit run --all-files tartufo
-.PHONY: tartufo
+# Scan the staged changes for secrets, as the pre-commit hook does.
+gelato:
+	@pre-commit run gelato
+.PHONY: gelato
 
 # Render config/config.json into dist/macos and dist/windows.
 policies:

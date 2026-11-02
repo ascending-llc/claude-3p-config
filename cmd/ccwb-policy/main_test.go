@@ -21,6 +21,9 @@ func TestRunWritesBothPlatforms(t *testing.T) {
 		"macos/aws-config-CCWB.ini",
 		"windows/Claude-CCWB.reg",
 		"windows/aws-config-CCWB.ini",
+		"macos/Codex-CCWB.mobileconfig",
+		"macos/codex-requirements-CCWB.toml",
+		"windows/codex-requirements-CCWB.toml",
 	} {
 		path := filepath.Join(out, filepath.FromSlash(name))
 

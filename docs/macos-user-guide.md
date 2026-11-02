@@ -1,11 +1,12 @@
 # macOS user guide
 
-This sets up Claude Desktop and the Claude Code CLI on your Mac to use your organization's Claude models on Amazon Bedrock. You sign in with your organization account through AWS IAM Identity Center. Nothing is installed except a configuration profile and a few lines in `~/.aws/config`.
+This sets up Claude Desktop, the Claude Code CLI and, optionally, Codex (the ChatGPT desktop app, Codex CLI and IDE extension) on your Mac to use your organization's models on Amazon Bedrock. You sign in with your organization account through AWS IAM Identity Center. Nothing is installed except configuration profiles and a few lines in `~/.aws/config`.
 
-You need two files from whoever maintains your organization's configuration, or from `dist/macos/` if you generated them yourself:
+You need these files from whoever maintains your organization's configuration, or from `dist/macos/` if you generated them yourself:
 
 - `Claude-CCWB.mobileconfig`: the configuration profile for Claude Desktop and Claude Code
 - `aws-config-CCWB.ini`: the AWS CLI profile Claude Code signs in with
+- `Codex-CCWB.mobileconfig`: optional, separate managed configuration for local Codex/ChatGPT Work
 
 If your organization's IT installs the profile for you through device management, skip step 2.
 
@@ -68,6 +69,17 @@ Good to know:
 - **AWS credentials exported in your shell win.** If `AWS_ACCESS_KEY_ID` or `AWS_SESSION_TOKEN` is set, Claude Code uses them instead of the `CCWB` profile. Unset them, or start a new terminal.
 - **`/model` offers only your organization's models.** Web search isn't available on Bedrock.
 
+## 6. Use Codex with Bedrock
+
+Only do this when your organization has approved Codex on Bedrock and provided `Codex-CCWB.mobileconfig`.
+
+1. Double-click `Codex-CCWB.mobileconfig`, then install **Codex on Amazon Bedrock (CCWB)** under **System Settings → General → Device Management**. This is separate from the Claude profile, so either one can be rolled back independently.
+2. Run `aws sso login --profile CCWB` and confirm `aws sts get-caller-identity --profile CCWB` succeeds.
+3. Quit the ChatGPT/Codex desktop app and any Codex CLI or IDE extension, run `codex app-server daemon restart` in Terminal, then reopen them.
+4. Start a new local Codex task, check `/status` for provider `amazon-bedrock-runtime`, then send `Reply with exactly: bedrock-ok`.
+
+The managed profile selects the Bedrock provider and default model. When AWS credentials expire, Codex re-runs the SSO sign-in automatically (`auth_refresh`) and continues once you complete it, like Claude Code. IAM or an SCP—not the client model picker—decides which models are actually allowed. You do not need to sign out of ChatGPT.
+
 ## Sign out
 
 - **Claude Desktop:** sign out in the app.
@@ -77,7 +89,7 @@ The two sign-ins are independent; signing out of one doesn't affect the other.
 
 ## Uninstall
 
-1. **System Settings → General → Device Management**: select the profile and click **−**. Quit and reopen Claude Desktop.
+1. **System Settings → General → Device Management**: select the Claude profile and click **−**. If Codex was enabled, remove **Codex on Amazon Bedrock (CCWB)** separately. Quit and reopen the affected apps.
 2. Remove the `[sso-session ccwb]` and `[profile CCWB]` sections from `~/.aws/config`.
 
 ## Troubleshooting
@@ -90,3 +102,7 @@ The two sign-ins are independent; signing out of one doesn't affect the other.
 | Claude Code: `AWS authentication failed` | Run `aws sso login --profile CCWB`, then retry. If it persists, ask your administrator to check your permission set |
 | Claude Code: `403 … not authorized … with an explicit deny` | You asked for a model outside your organization's AIPs, for example with `--model`. Use `/model` to pick one of your organization's models |
 | `/status` doesn't list `Enterprise managed settings (plist)` | The profile isn't installed for your user; repeat step 2 |
+| Codex `/status` doesn't show `amazon-bedrock-runtime` | Check that the separate Codex profile is installed and that the client was fully restarted |
+| Codex CLI: `This chat uses model provider "openai", but your organization requires "amazon-bedrock-runtime"` | Quit the ChatGPT app, run `codex app-server daemon restart`, then start `codex` again |
+| The ChatGPT app can't renew the AWS sign-in because it can't find `aws` | The app looks for `aws` on your login shell's `PATH`. Run `$SHELL -ilc 'command -v aws'` in Terminal; if it prints nothing, add the AWS CLI's folder to `PATH` in your shell startup file, then quit and reopen the app |
+| Codex gets `AccessDenied` although STS works | STS proves identity only. Send the model ID, Region, error and Request ID to the AWS administrator; never send credentials |

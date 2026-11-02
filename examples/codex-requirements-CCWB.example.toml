@@ -1,0 +1,11 @@
+model_provider = "amazon-bedrock-runtime"
+allowed_web_search_modes = ["disabled"]
+
+[model_providers.amazon-bedrock-runtime.aws]
+profile = "CCWB"
+region = "us-east-1"
+auth_refresh = { command = "aws", args = ["sso", "login", "--profile", "CCWB"], timeout_ms = 300000 }
+
+[models.new_thread]
+model = "global.openai.gpt-6.1-terra"
+model_reasoning_effort = "medium"

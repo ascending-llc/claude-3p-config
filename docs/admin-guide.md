@@ -32,6 +32,9 @@ cp config/config.example.json config/config.json
 | `models[].anthropic_model_id` | The Anthropic model ID the AIP routes to (see below) |
 | `models[].label` | Optional name Claude Desktop shows; defaults to the capitalized tier, such as `Sonnet` |
 | `default_tier` | Optional tier both apps start with; defaults to `sonnet`. Must be a configured tier |
+| `codex.enabled` | Optional. Set to `true` to render Codex managed configuration; omitted or `false` keeps the existing Claude-only output |
+| `codex.default_model` | A Global (`global.openai.…`) or US Geo (`us.openai.…`) Bedrock Runtime inference profile ID, such as `global.openai.gpt-6.1-terra`. The generator checks only the form: check the model's AWS model card that the profile can be called from `aws.bedrock_region` (US Geo profiles also work from the Canadian Regions), and grant it in IAM |
+| `codex.reasoning_effort` | `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`, `ultra` or `persistent`. Each model supports only some of these; check the model card |
 | `desktop.mcp_servers[]` | Optional remote MCP servers: `name`, `url` (final https address) and, for a server that needs sign-in, `oauth` |
 | `desktop.mcp_servers[].oauth.client_id` | The public OAuth client registered for Claude Desktop at the server's authorization server (see below) |
 | `desktop.mcp_servers[].oauth.scope` | Optional space-separated scopes Desktop requests. Without it, Desktop requests every scope the server advertises |
@@ -95,9 +98,13 @@ dist/macos/Claude-CCWB.mobileconfig    one profile, two payloads: Claude Desktop
 dist/macos/aws-config-CCWB.ini         ~/.aws/config snippet
 dist/windows/Claude-CCWB.reg           both policies under HKLM
 dist/windows/aws-config-CCWB.ini       same snippet, for %USERPROFILE%\.aws\config
+
+dist/macos/Codex-CCWB.mobileconfig     the Codex requirements, for macOS MDM
+dist/macos/codex-requirements-CCWB.toml
+dist/windows/codex-requirements-CCWB.toml
 ```
 
-On a Mac, `plutil -lint dist/macos/Claude-CCWB.mobileconfig` should print `OK`.
+On a Mac, run `plutil -lint` for both `.mobileconfig` files; each should print `OK`.
 
 ## 4. Distribute
 
@@ -106,6 +113,8 @@ The repository doesn't distribute anything. Pick what fits:
 - **Self-install.** Send the `dist/macos` or `dist/windows` folder through a private channel and point people to the [macOS](macos-user-guide.md) or [Windows](windows-user-guide.md) user guide.
 - **MDM on macOS** (Jamf, Kandji, Intune and similar). Upload `Claude-CCWB.mobileconfig` as a custom profile. Both payloads were tested installed per user (`PayloadScope` `User`), so deploy it through the user channel. MDM tools usually sign profiles; a self-installed unsigned profile shows as "Unverified", which is expected. The AWS snippet still has to reach each person's `~/.aws/config`, through a script or the user guide.
 - **Windows management** (Intune, Group Policy). Import `Claude-CCWB.reg` or set the same values. They live under `HKEY_LOCAL_MACHINE`, so this needs administrator rights. Claude Code ignores some managed-only keys in the per-user `HKCU` hive, and Claude Desktop ignores user policy whenever machine policy exists.
+- **Codex on macOS.** Deploy `Codex-CCWB.mobileconfig` through the user channel. It writes the requirements as Base64 TOML (`requirements_toml_base64`) under the `com.openai.codex` preference domain. Without MDM, install `codex-requirements-CCWB.toml` as `/etc/codex/requirements.toml`.
+- **Codex on Windows.** Deploy `codex-requirements-CCWB.toml` as `%ProgramData%\OpenAI\Codex\requirements.toml`, writable only by administrators. Codex has no registry or Group Policy settings, so use Intune, Group Policy file deployment or a similar tool.
 
 To change models or settings later, update the config, regenerate and reinstall. On macOS the new profile replaces the old one as long as `profile.identifier` hasn't changed.
 
@@ -131,6 +140,22 @@ To change models or settings later, update the config, regenerate and reinstall.
 | `availableModels`, `enforceAvailableModels` | Only the configured tiers' aliases, including for the Default option. Without this, Claude Code's Bedrock default is Opus through a public inference profile, which bypasses your AIPs |
 
 Because these are managed settings, they apply to **every** Claude Code session for that user on that machine, and users can't override them.
+
+**Codex** gets one file, `requirements.toml`:
+
+- **Enforced; users can't override it:** it pins the built-in `amazon-bedrock-runtime` provider and replaces any user definition of it with the `CCWB` profile, the Bedrock Region, and an `auth_refresh` command that re-runs `aws sso login --profile CCWB` when credentials expire, the Codex counterpart of Claude Code's `awsAuthRefresh`. It also allows web search only as `disabled`, since hosted web search isn't available on Bedrock Runtime.
+- **Starting values; users can change them:** `[models.new_thread]` sets `codex.default_model` and `codex.reasoning_effort`. The CLI and the ChatGPT app apply them to each new thread unless the user picks another model.
+
+The generator doesn't write `managed_config.toml`, Codex's older file for defaults: Codex ignores it on Windows, and its own documentation describes it as being phased out in favor of `requirements.toml`.
+
+Codex runs `auth_refresh` without a shell and only accepts the bare command `aws`, so the AWS CLI must be on the `PATH` that Codex itself sees:
+
+- **CLI and IDE extension:** the `PATH` of the terminal or editor that started them.
+- **ChatGPT app on macOS:** at launch the app runs the user's login shell as `$SHELL -ilc` (interactive and login), copies its environment, and passes it to its bundled Codex. So `aws` must be on the `PATH` after the shell's startup files run: for zsh `~/.zshenv`, `~/.zprofile`, `~/.zshrc` and `~/.zlogin`; for bash only the first of `~/.bash_profile`, `~/.bash_login` and `~/.profile`, which doesn't read `~/.bashrc` unless it sources it. If that shell exits with an error or takes longer than about 10 seconds, the app falls back to its own `PATH` (`/usr/bin:/bin:/usr/sbin:/sbin`), which doesn't include `/usr/local/bin` or `/opt/homebrew/bin`. Check with `$SHELL -ilc 'command -v aws'` and test C10 in the [test plan](test-plan.md). This is the app's behavior, observed in version 26.1027, not something Codex documents.
+
+After installing or changing the Codex profile, quit the ChatGPT app and run `codex app-server daemon restart`. The CLI connects to a long-running background Codex server that keeps the settings it started with, and fails with `modelProviderPolicyConflict` (provider `openai`) when those predate the profile.
+
+Codex has no model allowlist requirement, so IAM/SCP must restrict actual model access. See section 4 for the macOS and Windows deployment paths.
 
 ## 6. Sign-in lifetime
 

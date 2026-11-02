@@ -23,6 +23,9 @@ type (
 		AWS     AWS     `json:"aws"`
 		Profile Profile `json:"profile"`
 		Models  []Model `json:"models"`
+		// Codex configures managed local Codex clients. Leave it unset to render
+		// only the existing Claude and AWS artifacts.
+		Codex *Codex `json:"codex,omitempty"`
 		// DefaultTier is the tier both apps start with. It defaults to TierSonnet.
 		DefaultTier string  `json:"default_tier,omitempty"`
 		Desktop     Desktop `json:"desktop"`
@@ -52,6 +55,18 @@ type (
 		AnthropicModelID string `json:"anthropic_model_id"`
 		// Label is the name Claude Desktop shows. It defaults to the capitalized tier.
 		Label string `json:"label,omitempty"`
+	}
+
+	// Codex holds the managed defaults for Codex on Amazon Bedrock. When it is
+	// nil or explicitly disabled, Render omits every Codex artifact.
+	Codex struct {
+		// Enabled controls whether Codex artifacts are rendered. A pointer keeps
+		// an omitted JSON field distinguishable from an explicit false value.
+		Enabled *bool `json:"enabled"`
+		// DefaultModel is one approved Bedrock Runtime inference profile ID.
+		DefaultModel string `json:"default_model"`
+		// ReasoningEffort is the default effort shared by the approved models.
+		ReasoningEffort string `json:"reasoning_effort"`
 	}
 
 	// Desktop holds settings that apply to Claude Desktop only.
@@ -132,16 +147,23 @@ var (
 	// tiers lists every tier in policy order.
 	tiers = []string{TierOpus, TierSonnet, TierHaiku}
 
-	accountIDPattern  = regexp.MustCompile(`^[0-9]{12}$`)
-	regionPattern     = regexp.MustCompile(`^[a-z]{2}(-gov)?-[a-z]+-[0-9]+$`)
-	roleNamePattern   = regexp.MustCompile(`^[\w+=,.@-]{1,64}$`)
-	modelIDPattern    = regexp.MustCompile(`^claude-[a-z0-9-]+$`)
+	accountIDPattern = regexp.MustCompile(`^[0-9]{12}$`)
+	regionPattern    = regexp.MustCompile(`^[a-z]{2}(-gov)?-[a-z]+-[0-9]+$`)
+	roleNamePattern  = regexp.MustCompile(`^[\w+=,.@-]{1,64}$`)
+	modelIDPattern   = regexp.MustCompile(`^claude-[a-z0-9-]+$`)
+	// codexModelPattern matches the Global and US Geo cross-Region inference
+	// profiles that Codex's amazon-bedrock-runtime provider accepts. Which of
+	// them a user may invoke is for IAM/SCP to decide, not this list.
+	codexModelPattern = regexp.MustCompile(`^(global|us)\.openai\.[a-z0-9]+([.-][a-z0-9]+)*$`)
 	serverNamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]*$`)
 	// clientIDPattern and scopePattern follow the client_id and scope syntax of RFC 6749 appendix A.
 	clientIDPattern   = regexp.MustCompile(`^[\x21-\x7E]+$`)
 	scopePattern      = regexp.MustCompile(`^[\x21\x23-\x5B\x5D-\x7E]+( [\x21\x23-\x5B\x5D-\x7E]+)*$`)
 	identifierPattern = regexp.MustCompile(`^[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$`)
-	aipARNPattern     = regexp.MustCompile(
+	// codexReasoningEfforts are the effort values Codex knows; each model
+	// supports a subset.
+	codexReasoningEfforts = []string{"none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra", "persistent"}
+	aipARNPattern         = regexp.MustCompile(
 		`^arn:aws(?:-us-gov|-cn)?:bedrock:([a-z0-9-]+):([0-9]{12}):application-inference-profile/[a-z0-9]+$`)
 )
 
@@ -223,14 +245,45 @@ func (c Config) orderedModels() []Model {
 	return models
 }
 
+// codexEnabled reports whether the deployment asks Render for Codex
+// artifacts. Validation guarantees Enabled is present when Codex is present.
+func (c Config) codexEnabled() bool {
+	return c.Codex != nil && c.Codex.Enabled != nil && *c.Codex.Enabled
+}
+
 func (v *validator) validate(cfg Config) {
 	v.validateAWS(cfg.AWS)
 	v.validateModels(cfg.Models, cfg.AWS)
 	v.validateDefaultTier(cfg)
+	v.validateCodex(cfg.Codex)
 	v.validateMCPServers(cfg.Desktop.MCPServers)
 	v.field("profile.identifier", cfg.Profile.Identifier, pattern(identifierPattern, "a reverse-DNS identifier such as com.example.claude"))
 	v.field("profile.display_name", cfg.Profile.DisplayName, nonEmpty)
 	v.field("profile.organization", cfg.Profile.Organization, nonEmpty)
+}
+
+func (v *validator) validateCodex(c *Codex) {
+	if c == nil {
+		return
+	}
+
+	if c.Enabled == nil {
+		v.fail("codex.enabled", "is required")
+
+		return
+	}
+
+	if !*c.Enabled {
+		return
+	}
+
+	v.field("codex.default_model", c.DefaultModel, pattern(codexModelPattern,
+		"a global. or us. Bedrock Runtime inference profile ID of an OpenAI model, such as global.openai.gpt-6.1-terra"))
+
+	if !slices.Contains(codexReasoningEfforts, c.ReasoningEffort) {
+		v.fail("codex.reasoning_effort", fmt.Sprintf("must be one of %s, got %q",
+			strings.Join(codexReasoningEfforts, ", "), c.ReasoningEffort))
+	}
 }
 
 func (v *validator) validateAWS(a AWS) {

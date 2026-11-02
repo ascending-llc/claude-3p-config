@@ -1,6 +1,6 @@
 # claude-3p-config
 
-Generates the managed policies that point Claude Desktop and the Claude Code CLI at Amazon Bedrock, signed in through AWS IAM Identity Center. Configuration only: no binaries are shipped. `cmd/ccwb-policy` renders `config/config.json` into a macOS `.mobileconfig`, a Windows `.reg` and an `~/.aws/config` snippet. See README.md for the user-facing overview.
+Generates the managed policies that point Claude Desktop and the Claude Code CLI at Amazon Bedrock, signed in through AWS IAM Identity Center, plus — when the config enables it — the Codex `requirements.toml` that does the same through Bedrock Runtime. Configuration only: no binaries are shipped. `cmd/ccwb-policy` renders `config/config.json` into macOS `.mobileconfig` profiles, a Windows `.reg`, a Codex `requirements.toml` (also embedded in a macOS profile), and an `~/.aws/config` snippet. See README.md for the user-facing overview.
 
 ## Keep these in sync
 
@@ -10,7 +10,7 @@ A change to the config schema or to any rendered key isn't done until all of the
 - `policy/testdata/valid.json` and the golden files: `go test ./policy -update`, then review the golden diff before committing
 - `docs/admin-guide.md` (field table and "What the policies set"), the user guides, and `docs/test-plan.md` if behavior people check changes
 
-`ProfileName` (`CCWB`) and `SSOSessionName` (`ccwb`) are shared by the Claude Code policy and the AWS snippet; never change one without the other.
+`ProfileName` (`CCWB`) and `SSOSessionName` (`ccwb`) are shared by the Claude Code policy, the Codex requirements and the AWS snippet; never change one without the other.
 
 ## Facts the design depends on
 
@@ -21,6 +21,10 @@ Verified on macOS on 2026-10-21 and on Windows 10 on 2026-10-22. Note in `docs/t
 - `modelOverrides` keys must be Anthropic model IDs; without them Claude Code doesn't recognize an AIP ARN.
 - Claude Desktop runs managed-MCP OAuth sign-in on the device. Its automatic client registration always listens on `127.0.0.1:53280`, inside the Windows dynamic port range that WSL2 and Hyper-V reserve from, so the policy always sets a pre-registered `clientId` and a `callbackPort` below 49152. Desktop rejects `callbackPort` without `clientId`, drops any `managedMcpServers` entry it can't parse, and logs why in `main.log`.
 - On Windows both policies go under `HKLM`: Claude Code ignores some managed-only keys in `HKCU`, and Desktop ignores user policy when machine policy exists.
+- Codex (0.166.0) reads admin-enforced `requirements.toml` from `/etc/codex/requirements.toml` or MDM `com.openai.codex:requirements_toml_base64` on macOS, and from `%ProgramData%\OpenAI\Codex\requirements.toml` on Windows. It ignores `CODEX_HOME\managed_config.toml` on Windows (verified 2026-11-02), so the generator writes no `managed_config.toml` at all.
+- Codex's `aws.auth_refresh` accepts only `command = "aws"` in 0.165.0-alpha.1.2 and re-runs the command when AWS credentials expire. It runs the command without a shell, so `aws` must be on the `PATH` Codex itself sees. The macOS ChatGPT app (26.1027, verified 2026-11-02) gets that `PATH` by running `$SHELL -ilc` at launch, falling back to `/usr/bin:/bin:/usr/sbin:/sbin` if the shell fails or times out. The CLI talks to a long-running `codex app-server` daemon that must be restarted (`codex app-server daemon restart`) after the profile is installed or changed, or it reports `modelProviderPolicyConflict`. The generator sets it to `aws sso login --profile CCWB` with a five-minute timeout for the browser sign-in.
+- Codex's `requirements.toml` accepts `model_provider` and `model_providers`; a required provider entry replaces the user's and is validated like a `config.toml` Bedrock override. So the provider, profile, Region and `auth_refresh` go in the requirements. The defaults users may change (model, effort) go in its `[models.new_thread]` table, which the CLI and the ChatGPT app apply to new threads without enforcing them (verified on Windows 2026-11-02).
+- Codex has no supported model allowlist key. IAM/SCP is the model boundary — don't describe the Codex config as a whitelist.
 - When unsure about a Claude Desktop or Claude Code setting, check the current docs (code.claude.com, claude.com/docs/third-party) instead of guessing; both products change quickly.
 
 ## Go conventions
@@ -47,8 +51,8 @@ Verified on macOS on 2026-10-21 and on Windows 10 on 2026-10-22. Note in `docs/t
 ## Tooling
 
 - Run `pre-commit install -t pre-commit` once. Use the `Makefile` targets: `make all` (test + lint) is the bar for done; `make fmt` fixes formatting and import grouping.
-- pre-commit builds its Python hooks (tartufo) with `python3.14`, matching `.python-version`. tartufo scans staged changes for secrets; add a false positive to `tartufo.toml` with a `reason`, never by disabling the hook.
-- CI (`.github/workflows/test-and-lint.yaml`) runs `make test`, `make lint` and `make tartufo` on Linux, and `make test` on macOS for the `plutil -lint` check.
+- The gelato pre-commit hook scans staged changes for secrets; `make gelato` runs it by hand. Its config is the `[tool.tartufo]` table of `tartufo.toml`, the file and table names gelato reads. Add a false positive there with a `reason` (`exclude-entropy-patterns` for generated content that changes, `exclude-signatures` for a single finding), never by disabling the hook. CI doesn't scan for secrets; the local hook is the check.
+- CI (`.github/workflows/test-and-lint.yaml`) runs `make test` and `make lint` on Linux, with pre-commit on Python from `.python-version`, and `make test` on macOS for the `plutil -lint` check.
 - golangci-lint must pass. Suppress a false positive in `.golangci.yaml` under `linters.exclusions.rules`, scoped to `path` and `text`, with a comment explaining why; never a blanket `//nolint` or a disabled linter.
 - `config/config.json` and `dist/` hold real account details and are git-ignored; never commit them or paste their contents into examples or tests.
 - `.reg` files are UTF-16LE with CRLF line endings and marked `binary` in `.gitattributes`; read them with `iconv -f UTF-16 -t UTF-8`.
