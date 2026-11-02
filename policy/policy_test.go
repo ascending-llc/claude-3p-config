@@ -502,9 +502,14 @@ func TestParseRejectsInvalidConfig(t *testing.T) {
 		{
 			name:    "codex model that is not an OpenAI inference profile",
 			mutate:  func(c *Config) { c.Codex.DefaultModel = "openai.gpt-6.1-sol" },
-			wantErr: []string{"codex.default_model: must be one of the approved"},
+			wantErr: []string{"codex.default_model: must be a global. or us. Bedrock Runtime inference profile ID of an OpenAI model"},
 		},
-		{name: "unknown codex reasoning effort", mutate: func(c *Config) { c.Codex.ReasoningEffort = "hihg" }, wantErr: []string{`codex.reasoning_effort: must be "low", "medium" or "high"`}},
+		{
+			name:    "codex model of another provider",
+			mutate:  func(c *Config) { c.Codex.DefaultModel = "global.anthropic.claude-sonnet-5" },
+			wantErr: []string{"codex.default_model: must be a global. or us. Bedrock Runtime inference profile ID of an OpenAI model"},
+		},
+		{name: "unknown codex reasoning effort", mutate: func(c *Config) { c.Codex.ReasoningEffort = "hihg" }, wantErr: []string{`codex.reasoning_effort: must be one of none, minimal, low, medium, high, xhigh, max, ultra, persistent, got "hihg"`}},
 		{name: "bad identifier", mutate: func(c *Config) { c.Profile.Identifier = "claude" }, wantErr: []string{"profile.identifier: must be a reverse-DNS identifier"}},
 		{name: "empty organization", mutate: func(c *Config) { c.Profile.Organization = " " }, wantErr: []string{"profile.organization: must not be empty"}},
 		{
@@ -545,6 +550,28 @@ func TestParseRejectsInvalidConfig(t *testing.T) {
 				if !strings.Contains(err.Error(), want) {
 					t.Errorf("error %q does not contain %q", err.Error(), want)
 				}
+			}
+		})
+	}
+}
+
+func TestParseAcceptsCodexModels(t *testing.T) {
+	for _, model := range []string{"global.openai.gpt-6-astra", "us.openai.gpt-6-luna", "global.openai.gpt-6.1-terra", "us.openai.gpt-6.1-sol"} {
+		t.Run(model, func(t *testing.T) {
+			cfg, err := Load(validConfig, Options{})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			cfg.Codex.DefaultModel = model
+
+			mutated, err := json.Marshal(cfg)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if _, err := Parse(bytes.NewReader(mutated), Options{}); err != nil {
+				t.Errorf("Parse: %s", err.Error())
 			}
 		})
 	}

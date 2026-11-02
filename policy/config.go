@@ -147,18 +147,22 @@ var (
 	// tiers lists every tier in policy order.
 	tiers = []string{TierOpus, TierSonnet, TierHaiku}
 
-	accountIDPattern  = regexp.MustCompile(`^[0-9]{12}$`)
-	regionPattern     = regexp.MustCompile(`^[a-z]{2}(-gov)?-[a-z]+-[0-9]+$`)
-	roleNamePattern   = regexp.MustCompile(`^[\w+=,.@-]{1,64}$`)
-	modelIDPattern    = regexp.MustCompile(`^claude-[a-z0-9-]+$`)
-	codexModelPattern = regexp.MustCompile(
-		`^(global|us)\.openai\.gpt-(6-luna|6\.1-sol|6\.1-terra)$`)
+	accountIDPattern = regexp.MustCompile(`^[0-9]{12}$`)
+	regionPattern    = regexp.MustCompile(`^[a-z]{2}(-gov)?-[a-z]+-[0-9]+$`)
+	roleNamePattern  = regexp.MustCompile(`^[\w+=,.@-]{1,64}$`)
+	modelIDPattern   = regexp.MustCompile(`^claude-[a-z0-9-]+$`)
+	// codexModelPattern matches the Global and US Geo cross-Region inference
+	// profiles that Codex's amazon-bedrock-runtime provider accepts. Which of
+	// them a user may invoke is for IAM/SCP to decide, not this list.
+	codexModelPattern = regexp.MustCompile(`^(global|us)\.openai\.[a-z0-9]+([.-][a-z0-9]+)*$`)
 	serverNamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]*$`)
 	// clientIDPattern and scopePattern follow the client_id and scope syntax of RFC 6749 appendix A.
-	clientIDPattern       = regexp.MustCompile(`^[\x21-\x7E]+$`)
-	scopePattern          = regexp.MustCompile(`^[\x21\x23-\x5B\x5D-\x7E]+( [\x21\x23-\x5B\x5D-\x7E]+)*$`)
-	identifierPattern     = regexp.MustCompile(`^[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$`)
-	codexReasoningEfforts = []string{"low", "medium", "high"}
+	clientIDPattern   = regexp.MustCompile(`^[\x21-\x7E]+$`)
+	scopePattern      = regexp.MustCompile(`^[\x21\x23-\x5B\x5D-\x7E]+( [\x21\x23-\x5B\x5D-\x7E]+)*$`)
+	identifierPattern = regexp.MustCompile(`^[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$`)
+	// codexReasoningEfforts are the effort values Codex knows; each model
+	// supports a subset.
+	codexReasoningEfforts = []string{"none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra", "persistent"}
 	aipARNPattern         = regexp.MustCompile(
 		`^arn:aws(?:-us-gov|-cn)?:bedrock:([a-z0-9-]+):([0-9]{12}):application-inference-profile/[a-z0-9]+$`)
 )
@@ -274,10 +278,11 @@ func (v *validator) validateCodex(c *Codex) {
 	}
 
 	v.field("codex.default_model", c.DefaultModel, pattern(codexModelPattern,
-		"one of the approved global. or us. OpenAI Bedrock Runtime inference profile IDs"))
+		"a global. or us. Bedrock Runtime inference profile ID of an OpenAI model, such as global.openai.gpt-6.1-terra"))
 
 	if !slices.Contains(codexReasoningEfforts, c.ReasoningEffort) {
-		v.fail("codex.reasoning_effort", `must be "low", "medium" or "high"`)
+		v.fail("codex.reasoning_effort", fmt.Sprintf("must be one of %s, got %q",
+			strings.Join(codexReasoningEfforts, ", "), c.ReasoningEffort))
 	}
 }
 

@@ -33,8 +33,8 @@ cp config/config.example.json config/config.json
 | `models[].label` | Optional name Claude Desktop shows; defaults to the capitalized tier, such as `Sonnet` |
 | `default_tier` | Optional tier both apps start with; defaults to `sonnet`. Must be a configured tier |
 | `codex.enabled` | Optional. Set to `true` to render Codex managed configuration; omitted or `false` keeps the existing Claude-only output |
-| `codex.default_model` | One approved Global or US Geo Runtime inference profile ID for GPT-6 Luna, GPT-6.1 Sol or GPT-6.1 Terra |
-| `codex.reasoning_effort` | `low`, `medium` or `high` |
+| `codex.default_model` | A Global (`global.openai.…`) or US Geo (`us.openai.…`) Bedrock Runtime inference profile ID, such as `global.openai.gpt-6.1-terra`. The generator checks only the form: check the model's AWS model card that the profile can be called from `aws.bedrock_region` (US Geo profiles also work from the Canadian Regions), and grant it in IAM |
+| `codex.reasoning_effort` | `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`, `ultra` or `persistent`. Each model supports only some of these; check the model card |
 | `desktop.mcp_servers[]` | Optional remote MCP servers: `name`, `url` (final https address) and, for a server that needs sign-in, `oauth` |
 | `desktop.mcp_servers[].oauth.client_id` | The public OAuth client registered for Claude Desktop at the server's authorization server (see below) |
 | `desktop.mcp_servers[].oauth.scope` | Optional space-separated scopes Desktop requests. Without it, Desktop requests every scope the server advertises |
