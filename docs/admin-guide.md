@@ -143,7 +143,12 @@ To change models or settings later, update the config, regenerate and reinstall.
 
 Because these are managed settings, they apply to **every** Claude Code session for that user on that machine, and users can't override them.
 
-**Codex** uses the generated `managed_config.toml` to select `amazon-bedrock-runtime`, the configured default model, reasoning effort, disabled Runtime web search, and an `auth_refresh` command that re-runs `aws sso login --profile CCWB` when credentials expire — the Codex counterpart of Claude Code's `awsAuthRefresh`. The generated `requirements.toml` enforces only the provider. Codex has no supported `allowed_models` requirement, so IAM/SCP must restrict actual model access. See section 4 for the macOS and Windows deployment paths.
+**Codex** gets two files, delivered together:
+
+- `requirements.toml` is enforced; users can't override it. It pins the built-in `amazon-bedrock-runtime` provider and replaces any user definition of it with the `CCWB` profile, the Bedrock Region, and an `auth_refresh` command that re-runs `aws sso login --profile CCWB` when credentials expire, the Codex counterpart of Claude Code's `awsAuthRefresh`. It also allows web search only as `disabled`, since hosted web search isn't available on Bedrock Runtime.
+- `managed_config.toml` holds starting values: the default model and reasoning effort. Codex applies them at launch, but users can change model and effort during a session.
+
+Codex runs `auth_refresh` without a shell and only accepts the bare command `aws`, so the AWS CLI must be on the `PATH` that Codex itself sees. A desktop app started from the Dock or Start menu may not see the same `PATH` as a terminal; check this with test C10 in the [test plan](test-plan.md). Codex has no model allowlist requirement, so IAM/SCP must restrict actual model access. See section 4 for the macOS and Windows deployment paths.
 
 ## 6. Sign-in lifetime
 

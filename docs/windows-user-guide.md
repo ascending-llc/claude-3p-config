@@ -7,7 +7,7 @@ You need two files from whoever maintains your organization's configuration, or 
 - `Claude-CCWB.reg`: the policies for Claude Desktop and Claude Code
 - `aws-config-CCWB.ini`: the AWS CLI profile Claude Code signs in with
 - `codex-managed-config-CCWB.toml`: optional managed defaults for Codex
-- `codex-requirements-CCWB.toml`: optional system requirement that enforces the Bedrock Runtime provider
+- `codex-requirements-CCWB.toml`: optional system requirements that enforce the Bedrock Runtime provider, AWS profile and Region
 
 If your organization's IT deploys the policies for you through Intune or Group Policy, skip step 2.
 

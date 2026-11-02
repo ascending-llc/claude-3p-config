@@ -6,7 +6,7 @@ This repository sets up **Claude Desktop**, the **Claude Code CLI**, and optiona
 | --- | --- |
 | Claude Desktop policy | Uses Desktop's built-in IAM Identity Center sign-in, calls Bedrock through your application inference profiles (AIPs), and adds managed MCP connectors |
 | Claude Code policy | Points Claude Code at Bedrock through the `CCWB` AWS CLI profile, routes every model alias to your AIPs, and runs `aws sso login` when credentials expire |
-| Codex managed configuration | Points local Codex clients at Bedrock Runtime, sets an approved default OpenAI model, and enforces the provider through `requirements.toml` |
+| Codex managed configuration | Points local Codex clients at Bedrock Runtime, sets a default OpenAI model, and enforces the provider, AWS profile and Region through `requirements.toml` |
 | AWS CLI profile | The `[profile CCWB]` and `[sso-session ccwb]` sections that Claude Code and Codex sign in with |
 
 The generator `ccwb-policy` renders them from one `config/config.json`:

@@ -28,10 +28,13 @@ type (
 		// CodexMobileconfig is the macOS managed preferences profile for Codex.
 		// It embeds the managed config and requirements TOML as Base64 strings.
 		CodexMobileconfig []byte
-		// CodexManagedConfig selects Bedrock Runtime and the deployment's default
-		// model. Administrators install it as managed_config.toml.
+		// CodexManagedConfig sets the deployment's default model and reasoning
+		// effort, which users can change. Administrators install it as
+		// managed_config.toml.
 		CodexManagedConfig []byte
-		// CodexRequirements enforces the Bedrock Runtime provider.
+		// CodexRequirements enforces the Bedrock Runtime provider, its AWS
+		// profile, Region and sign-in refresh, and disabled web search.
+		// Administrators install it as requirements.toml.
 		CodexRequirements []byte
 	}
 
@@ -96,8 +99,8 @@ func Render(cfg Config) (Artifacts, error) {
 	}
 
 	if cfg.codexEnabled() {
-		artifacts.CodexManagedConfig = renderCodexManagedConfig(cfg)
-		artifacts.CodexRequirements = renderCodexRequirements()
+		artifacts.CodexManagedConfig = renderCodexManagedConfig(*cfg.Codex)
+		artifacts.CodexRequirements = renderCodexRequirements(cfg.AWS)
 
 		artifacts.CodexMobileconfig, err = renderCodexMobileconfig(
 			cfg.Profile,
@@ -318,30 +321,37 @@ region = %s
 `, SSOSessionName, a.SSOStartURL, a.SSORegion, ProfileName, SSOSessionName, a.AccountID, a.SSORoleName, a.BedrockRegion))
 }
 
-// renderCodexManagedConfig configures Codex's built-in Bedrock Runtime
-// provider. The nested AWS block avoids relying on process-wide AWS_PROFILE
-// and AWS_REGION environment variables. auth_refresh re-runs the SSO sign-in
-// when credentials expire, mirroring Claude Code's awsAuthRefresh. Verified on
-// Codex 0.165.0-alpha.1.2, which accepts only command = "aws"; the five-minute
-// timeout leaves room for the browser sign-in to complete.
-func renderCodexManagedConfig(cfg Config) []byte {
-	return []byte(fmt.Sprintf(`model_provider = "amazon-bedrock-runtime"
-model = %q
+// renderCodexManagedConfig sets the starting model and reasoning effort.
+// Codex applies these managed defaults at launch, but users can change them
+// during a session, so everything that must hold lives in the requirements.
+// web_search is set here too because Codex rejects a default that the
+// requirements don't allow.
+func renderCodexManagedConfig(c Codex) []byte {
+	return []byte(fmt.Sprintf(`model = %q
 model_reasoning_effort = %q
 web_search = "disabled"
+`, c.DefaultModel, c.ReasoningEffort))
+}
+
+// renderCodexRequirements pins Codex to its built-in Bedrock Runtime provider
+// and replaces any user definition of that provider, so neither config.toml
+// nor a command-line override can switch provider, AWS profile or Region.
+// Hosted web search isn't available on Bedrock Runtime, so it is allowed only
+// as disabled. Model authorization remains an AWS IAM/SCP responsibility.
+//
+// auth_refresh re-runs the SSO sign-in when credentials expire, like Claude
+// Code's awsAuthRefresh. Codex accepts only command = "aws", runs it without a
+// shell and looks it up on its own PATH; the five-minute timeout leaves room
+// for the browser sign-in.
+func renderCodexRequirements(a AWS) []byte {
+	return []byte(fmt.Sprintf(`model_provider = "amazon-bedrock-runtime"
+allowed_web_search_modes = ["disabled"]
 
 [model_providers.amazon-bedrock-runtime.aws]
 profile = %q
 region = %q
 auth_refresh = { command = "aws", args = ["sso", "login", "--profile", %q], timeout_ms = 300000 }
-`, cfg.Codex.DefaultModel, cfg.Codex.ReasoningEffort, ProfileName, cfg.AWS.BedrockRegion, ProfileName))
-}
-
-// renderCodexRequirements prevents a user config or command-line override
-// from switching Codex to another provider. Model authorization remains an
-// AWS IAM/SCP responsibility.
-func renderCodexRequirements() []byte {
-	return []byte("model_provider = \"amazon-bedrock-runtime\"\n")
+`, ProfileName, a.BedrockRegion, ProfileName))
 }
 
 func renderCodexMobileconfig(p Profile, managedConfig, requirements []byte) ([]byte, error) {
