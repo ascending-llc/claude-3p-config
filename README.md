@@ -13,7 +13,7 @@ The generator `ccwb-policy` renders them from one `config/config.json`:
 
 | Platform | Output | Status |
 | --- | --- | --- |
-| macOS | Claude and Codex `.mobileconfig` profiles, Codex TOML files, and `aws-config-CCWB.ini` | Claude tested end to end; Codex model calls verified with a hand-written config, managed installation untested |
+| macOS | Claude and Codex `.mobileconfig` profiles, Codex TOML files, and `aws-config-CCWB.ini` | Claude tested end to end; Codex managed profile tested with the CLI and the ChatGPT app; some checks still open (see the test plan) |
 | Windows | Claude `.reg`, Codex TOML files, and `aws-config-CCWB.ini` | Claude tested end to end; Codex untested |
 
 Codex uses its built-in `amazon-bedrock-runtime` provider; no local translation gateway is required. Client configuration selects the provider and default model, while IAM or an SCP remains the security boundary that restricts which models can actually be invoked.
