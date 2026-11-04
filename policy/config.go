@@ -67,6 +67,16 @@ type (
 		DefaultModel string `json:"default_model"`
 		// ReasoningEffort is the default effort shared by the approved models.
 		ReasoningEffort string `json:"reasoning_effort"`
+		// MCPServers configures remote MCP connections independently of Claude Desktop.
+		MCPServers []CodexMCPServer `json:"mcp_servers,omitempty"`
+	}
+
+	// CodexMCPServer is a remote MCP server reached by Codex over Streamable HTTP.
+	CodexMCPServer struct {
+		// Name identifies the server in the Codex configuration.
+		Name string `json:"name"`
+		// URL is the server's HTTPS MCP endpoint.
+		URL string `json:"url"`
 	}
 
 	// Desktop holds settings that apply to Claude Desktop only.
@@ -283,6 +293,22 @@ func (v *validator) validateCodex(c *Codex) {
 	if !slices.Contains(codexReasoningEfforts, c.ReasoningEffort) {
 		v.fail("codex.reasoning_effort", fmt.Sprintf("must be one of %s, got %q",
 			strings.Join(codexReasoningEfforts, ", "), c.ReasoningEffort))
+	}
+
+	seen := map[string]bool{}
+
+	for i, s := range c.MCPServers {
+		path := fmt.Sprintf("codex.mcp_servers[%d]", i)
+
+		v.field(path+".name", s.Name, pattern(serverNamePattern, "letters, digits, '-' and '_', starting with a letter or digit"))
+
+		if seen[s.Name] {
+			v.fail(path+".name", fmt.Sprintf("%q is listed more than once", s.Name))
+		}
+
+		seen[s.Name] = true
+
+		v.field(path+".url", s.URL, httpsURL)
 	}
 }
 

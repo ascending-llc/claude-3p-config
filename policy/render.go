@@ -26,8 +26,11 @@ type (
 		// AWSConfig is the ~/.aws/config snippet that defines ProfileName.
 		AWSConfig []byte
 		// CodexMobileconfig is the macOS managed preferences profile for Codex.
-		// It embeds CodexRequirements as a Base64 string.
+		// It embeds Base64-encoded CodexRequirements and optional CodexConfig.
 		CodexMobileconfig []byte
+		// CodexConfig is the MCP snippet to merge into a user's config.toml.
+		// It is nil without Codex MCP entries and is also embedded in the macOS profile.
+		CodexConfig []byte
 		// CodexRequirements enforces the Bedrock Runtime provider, its AWS
 		// profile, Region and sign-in refresh, and disabled web search, and
 		// sets the default model and reasoning effort for new threads, which
@@ -97,8 +100,9 @@ func Render(cfg Config) (Artifacts, error) {
 
 	if cfg.codexEnabled() {
 		artifacts.CodexRequirements = renderCodexRequirements(cfg.AWS, *cfg.Codex)
+		artifacts.CodexConfig = renderCodexConfig(cfg.Codex.MCPServers)
 
-		artifacts.CodexMobileconfig, err = renderCodexMobileconfig(cfg.Profile, artifacts.CodexRequirements)
+		artifacts.CodexMobileconfig, err = renderCodexMobileconfig(cfg.Profile, artifacts.CodexRequirements, artifacts.CodexConfig)
 		if err != nil {
 			return Artifacts{}, err
 		}
@@ -344,10 +348,33 @@ model_reasoning_effort = %q
 `, ProfileName, a.BedrockRegion, ProfileName, c.DefaultModel, c.ReasoningEffort))
 }
 
-func renderCodexMobileconfig(p Profile, requirements []byte) ([]byte, error) {
+// renderCodexConfig renders MCP connections separately from requirements.
+func renderCodexConfig(servers []CodexMCPServer) []byte {
+	if len(servers) == 0 {
+		return nil
+	}
+
+	var out bytes.Buffer
+
+	for i, s := range servers {
+		if i > 0 {
+			out.WriteByte('\n')
+		}
+
+		fmt.Fprintf(&out, "[mcp_servers.%s]\nurl = %q\nenabled = true\n", s.Name, s.URL)
+	}
+
+	return out.Bytes()
+}
+
+func renderCodexMobileconfig(p Profile, requirements, config []byte) ([]byte, error) {
 	identifier := p.Identifier + ".codex"
 	codexPayload := payload(identifier+".managed", "com.openai.codex", "Codex")
 	codexPayload["requirements_toml_base64"] = base64.StdEncoding.EncodeToString(requirements)
+
+	if len(config) > 0 {
+		codexPayload["config_toml_base64"] = base64.StdEncoding.EncodeToString(config)
+	}
 
 	profile := map[string]any{
 		"PayloadContent":      []any{codexPayload},

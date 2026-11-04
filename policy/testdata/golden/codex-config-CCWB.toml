@@ -1,0 +1,7 @@
+[mcp_servers.jarvis-registry]
+url = "https://mcp.example.com/codex?team=a&b=\"c\""
+enabled = true
+
+[mcp_servers.codex-tools]
+url = "https://tools.example.com/codex"
+enabled = true

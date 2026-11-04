@@ -1,0 +1,3 @@
+[mcp_servers.jarvis-registry]
+url = "REPLACE_WITH_CODEX_MCP_SERVER_URL"
+enabled = true

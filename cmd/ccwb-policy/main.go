@@ -100,6 +100,10 @@ func outputs(a policy.Artifacts, example bool) []output {
 			)
 		}
 
+		if len(a.CodexConfig) > 0 {
+			out = append(out, output{"codex-config-CCWB.example.toml", a.CodexConfig})
+		}
+
 		return out
 	}
 
@@ -115,6 +119,13 @@ func outputs(a policy.Artifacts, example bool) []output {
 			output{filepath.Join("macos", "Codex-CCWB.mobileconfig"), a.CodexMobileconfig},
 			output{filepath.Join("macos", "codex-requirements-CCWB.toml"), a.CodexRequirements},
 			output{filepath.Join("windows", "codex-requirements-CCWB.toml"), a.CodexRequirements},
+		)
+	}
+
+	if len(a.CodexConfig) > 0 {
+		out = append(out,
+			output{filepath.Join("macos", "codex-config-CCWB.toml"), a.CodexConfig},
+			output{filepath.Join("windows", "codex-config-CCWB.toml"), a.CodexConfig},
 		)
 	}
 

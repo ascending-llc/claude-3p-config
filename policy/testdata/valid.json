@@ -28,7 +28,17 @@
   "codex": {
     "enabled": true,
     "default_model": "us.openai.gpt-6.1-sol",
-    "reasoning_effort": "high"
+    "reasoning_effort": "high",
+    "mcp_servers": [
+      {
+        "name": "jarvis-registry",
+        "url": "https://mcp.example.com/codex?team=a&b=\"c\""
+      },
+      {
+        "name": "codex-tools",
+        "url": "https://tools.example.com/codex"
+      }
+    ]
   },
   "desktop": {
     "mcp_servers": [

@@ -35,6 +35,9 @@ cp config/config.example.json config/config.json
 | `codex.enabled` | Optional. Set to `true` to render Codex managed configuration; omitted or `false` keeps the existing Claude-only output |
 | `codex.default_model` | A Global (`global.openai.…`) or US Geo (`us.openai.…`) Bedrock Runtime inference profile ID, such as `global.openai.gpt-6.1-terra`. The generator checks only the form: check the model's AWS model card that the profile can be called from `aws.bedrock_region` (US Geo profiles also work from the Canadian Regions), and grant it in IAM |
 | `codex.reasoning_effort` | `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`, `ultra` or `persistent`. Each model supports only some of these; check the model card |
+| `codex.mcp_servers[]` | Optional remote MCP connections, independent of Claude Desktop. Each entry has `name` and `url`; omit the list or use an empty array to generate no MCP configuration |
+| `codex.mcp_servers[].name` | Server name: letters, digits, `-` and `_`, starting with a letter or digit. Names must be unique within the Codex list |
+| `codex.mcp_servers[].url` | HTTPS MCP endpoint. Claude Desktop's `oauth` configuration is not accepted; Codex handles sign-in separately |
 | `desktop.mcp_servers[]` | Optional remote MCP servers: `name`, `url` (final https address) and, for a server that needs sign-in, `oauth` |
 | `desktop.mcp_servers[].oauth.client_id` | The public OAuth client registered for Claude Desktop at the server's authorization server (see below) |
 | `desktop.mcp_servers[].oauth.scope` | Optional space-separated scopes Desktop requests. Without it, Desktop requests every scope the server advertises |
@@ -85,6 +88,25 @@ Confirm with the server's operators that the client is kept permanently. Some se
 
 Claude Desktop doesn't follow HTTP redirects from the MCP URL or its OAuth metadata, so use final addresses.
 
+### Codex MCP connections
+
+Add a separate `mcp_servers` field inside the `codex` object, for example:
+
+```json
+{
+  "mcp_servers": [
+    {
+      "name": "jarvis-registry",
+      "url": "https://jarvis.ascendingdc.com/gateway/proxy/mcpgw/mcp"
+    }
+  ]
+}
+```
+
+For each server, the generator writes `[mcp_servers.<name>]`, `url` and `enabled = true`. This configures the connection only; each user must still sign in through Codex when the server requires OAuth. Claude Desktop's static OAuth client ID, scopes and callback port are not copied to Codex.
+
+Connection configuration and allowlists serve different purposes: `config.toml` defines connections, while `mcp_servers` in `requirements.toml` restricts which configured connections may be enabled. An allowlist does not create connections. This generator does not add an MCP allowlist automatically. If your organization applies one separately, it must allow both the server name and URL or the connection will be disabled. See the [OpenAI MCP documentation](https://learn.chatgpt.com/docs/extend/mcp) and [managed configuration guide](https://learn.chatgpt.com/docs/enterprise/managed-configuration).
+
 ## 3. Generate
 
 ```bash
@@ -99,9 +121,12 @@ dist/macos/aws-config-CCWB.ini         ~/.aws/config snippet
 dist/windows/Claude-CCWB.reg           both policies under HKLM
 dist/windows/aws-config-CCWB.ini       same snippet, for %USERPROFILE%\.aws\config
 
-dist/macos/Codex-CCWB.mobileconfig     the Codex requirements, for macOS MDM
+dist/macos/Codex-CCWB.mobileconfig     Codex requirements and optional MCP connections
 dist/macos/codex-requirements-CCWB.toml
 dist/windows/codex-requirements-CCWB.toml
+
+dist/macos/codex-config-CCWB.toml       only generated when Codex MCP is configured
+dist/windows/codex-config-CCWB.toml     the same MCP configuration snippet
 ```
 
 On a Mac, run `plutil -lint` for both `.mobileconfig` files; each should print `OK`.
@@ -113,8 +138,12 @@ The repository doesn't distribute anything. Pick what fits:
 - **Self-install.** Send the `dist/macos` or `dist/windows` folder through a private channel and point people to the [macOS](macos-user-guide.md) or [Windows](windows-user-guide.md) user guide.
 - **MDM on macOS** (Jamf, Kandji, Intune and similar). Upload `Claude-CCWB.mobileconfig` as a custom profile. Both payloads were tested installed per user (`PayloadScope` `User`), so deploy it through the user channel. MDM tools usually sign profiles; a self-installed unsigned profile shows as "Unverified", which is expected. The AWS snippet still has to reach each person's `~/.aws/config`, through a script or the user guide.
 - **Windows management** (Intune, Group Policy). Import `Claude-CCWB.reg` or set the same values. They live under `HKEY_LOCAL_MACHINE`, so this needs administrator rights. Claude Code ignores some managed-only keys in the per-user `HKCU` hive, and Claude Desktop ignores user policy whenever machine policy exists.
-- **Codex on macOS.** Deploy `Codex-CCWB.mobileconfig` through the user channel. It writes the requirements as Base64 TOML (`requirements_toml_base64`) under the `com.openai.codex` preference domain. Without MDM, install `codex-requirements-CCWB.toml` as `/etc/codex/requirements.toml`.
-- **Codex on Windows.** Deploy `codex-requirements-CCWB.toml` as `%ProgramData%\OpenAI\Codex\requirements.toml`, writable only by administrators. Codex has no registry or Group Policy settings, so use Intune, Group Policy file deployment or a similar tool.
+- **Codex on macOS.** Deploy `Codex-CCWB.mobileconfig` through the user channel. It retains `requirements_toml_base64` under `com.openai.codex` and adds `config_toml_base64` when MCP is configured, so no user file changes are needed. For file-based deployment, install the requirements as `/etc/codex/requirements.toml` and merge the optional `codex-config-CCWB.toml` into each user's `~/.codex/config.toml`.
+- **Codex on Windows.** Deploy the requirements as `%ProgramData%\OpenAI\Codex\requirements.toml`, writable only by administrators. Merge the optional MCP snippet into the target user's `%USERPROFILE%\.codex\config.toml`, or into their custom `CODEX_HOME`. The generator only writes the snippet; deployment tooling or the user must merge it. Renaming it to `managed_config.toml` does not make it load automatically on Windows.
+
+Back up the configuration before merging the MCP snippet. Merge by server name: append new tables, or update `url` and `enabled` in existing HTTP tables while preserving other settings. Do not duplicate table headers or replace the whole user file. Repeated deployment should produce the same result. If `CODEX_HOME` is customized, target its `config.toml`. Removing a server later also requires removing its previously merged table. The generator does not clean old artifacts; generate into a clean output directory before distribution.
+
+When converting an existing stdio table to HTTP, first remove stdio-specific fields such as `command`, `args`, `env`, `env_vars` and `cwd`, then add `url`. Preserve applicable general settings such as timeouts and tool restrictions, and leave other servers intact. Do not keep both `command` and `url`: the tested client rejects this with `url is not supported for stdio` and fails to load the configuration.
 
 To change models or settings later, update the config, regenerate and reinstall. On macOS the new profile replaces the old one as long as `profile.identifier` hasn't changed.
 
@@ -141,12 +170,14 @@ To change models or settings later, update the config, regenerate and reinstall.
 
 Because these are managed settings, they apply to **every** Claude Code session for that user on that machine, and users can't override them.
 
-**Codex** gets one file, `requirements.toml`:
+**Codex** still gets its Bedrock policy through `requirements.toml`:
 
 - **Enforced; users can't override it:** it pins the built-in `amazon-bedrock-runtime` provider and replaces any user definition of it with the `CCWB` profile, the Bedrock Region, and an `auth_refresh` command that re-runs `aws sso login --profile CCWB` when credentials expire, the Codex counterpart of Claude Code's `awsAuthRefresh`. It also allows web search only as `disabled`, since hosted web search isn't available on Bedrock Runtime.
 - **Starting values; users can change them:** `[models.new_thread]` sets `codex.default_model` and `codex.reasoning_effort`. The CLI and the ChatGPT app apply them to each new thread unless the user picks another model.
 
-The generator doesn't write `managed_config.toml`, Codex's older file for defaults: Codex ignores it on Windows, and its own documentation describes it as being phased out in favor of `requirements.toml`.
+When MCP is configured, the generator also writes `codex-config-CCWB.toml`. The macOS profile embeds the requirements and MCP configuration under separate Base64 keys; Windows and file-based deployments must merge the MCP snippet. MCP input does not change the Bedrock provider, default model, AWS profile or Region.
+
+The generator does not write `managed_config.toml`: the Windows client tested for this project ignores that file. On macOS, `config_toml_base64` provisions MCP connections; the default model and reasoning effort remain in `[models.new_thread]` in the requirements.
 
 Codex runs `auth_refresh` without a shell and only accepts the bare command `aws`, so the AWS CLI must be on the `PATH` that Codex itself sees:
 

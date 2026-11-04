@@ -69,6 +69,12 @@ Only do this when your organization has approved Codex on Bedrock. IT should nor
 
 When AWS credentials expire, Codex re-runs the SSO sign-in automatically (`auth_refresh`) and continues once you complete it. IAM or an SCP—not the client model picker—enforces the real model allowlist. You do not need to sign out of ChatGPT.
 
+If IT also provided `codex-config-CCWB.toml`, merge its server tables into the actual Codex user's `%USERPROFILE%\.codex\config.toml`, or `config.toml` in their custom `CODEX_HOME`. Back up the file first. Add complete `[mcp_servers.<name>]` tables for new servers; for matching HTTP tables, update `url` and `enabled` while preserving other settings. Do not replace the whole file, duplicate tables or put the snippet in the requirements. Deployments running as SYSTEM or administrator must still target the intended user's configuration directory.
+
+If a matching table previously used stdio, remove its stdio-specific fields (`command`, `args`, `env`, `env_vars`, `cwd`) when switching to HTTP. Preserve applicable general settings and other servers; do not keep both `command` and `url`.
+
+After restarting the client, run `codex mcp list` to check the server. For OAuth, run `codex mcp login jarvis-registry` (substitute the server name as needed) or authenticate in the client's MCP settings. This sign-in is separate from AWS and Claude Desktop; `enabled` does not prove successful authentication or tool calls. The new MCP deployment and sign-in have not been tested end to end on Windows; see the test plan.
+
 ## Sign out
 
 Sign out in Claude Desktop. For Claude Code, run `aws sso logout`.
@@ -85,6 +91,8 @@ For Claude Desktop, delete the values that `Claude-CCWB.reg` lists under `HKEY_L
 
 If Codex was enabled, have IT back up and remove `%ProgramData%\OpenAI\Codex\requirements.toml`, then restart the client. Do not remove the user's `config.toml`, `auth.json`, plugins or project settings.
 
+If you merged the Codex MCP snippet, remove only the server tables added by that deployment and preserve the rest of the user configuration. Removing the requirements does not automatically remove these connections.
+
 ## Troubleshooting
 
 Claude Desktop's log is `main.log` in `%LOCALAPPDATA%\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Local\Claude-3p\logs` (the Microsoft Store install). Its messages often explain what the app shows only briefly.
@@ -98,5 +106,7 @@ Claude Desktop's log is `main.log` in `%LOCALAPPDATA%\Packages\Claude_pzs8sxrjxf
 | Claude Code: `403 … not authorized … with an explicit deny` | You asked for a model outside your organization's AIPs, for example with `--model`. Use `/model` to pick one of your organization's models |
 | `/status` doesn't list a managed settings source | The policies weren't imported under `HKEY_LOCAL_MACHINE`; repeat step 2 from a terminal opened with **Run as administrator** |
 | Codex `/status` doesn't show `amazon-bedrock-runtime` | Check that `%ProgramData%\OpenAI\Codex\requirements.toml` exists, then fully restart the client |
+| A Codex MCP server is missing or disabled | Check that the snippet was merged into the target user's configuration or custom `CODEX_HOME`; any organizational MCP allowlist must also allow the server name and URL |
+| Codex lists the MCP server, but its tools are unavailable | Complete that server's OAuth sign-in and check connection errors; AWS sign-in does not replace MCP sign-in |
 | The ChatGPT app shows "Cannot select `amazon-bedrock` …" | You chose Amazon Bedrock in the app's sign-in screen. Sign in with an account instead (step 4) |
 | Codex gets `AccessDenied` although STS works | STS proves identity only. Send the model ID, Region, error and Request ID to the AWS administrator; never send credentials |

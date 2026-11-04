@@ -2,10 +2,13 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/ascending-llc/claude-3p-config/policy"
 )
 
 func TestRunWritesBothPlatforms(t *testing.T) {
@@ -24,6 +27,8 @@ func TestRunWritesBothPlatforms(t *testing.T) {
 		"macos/Codex-CCWB.mobileconfig",
 		"macos/codex-requirements-CCWB.toml",
 		"windows/codex-requirements-CCWB.toml",
+		"macos/codex-config-CCWB.toml",
+		"windows/codex-config-CCWB.toml",
 	} {
 		path := filepath.Join(out, filepath.FromSlash(name))
 
@@ -41,6 +46,70 @@ func TestRunWritesBothPlatforms(t *testing.T) {
 		if !strings.Contains(stdout.String(), "wrote "+path) {
 			t.Errorf("stdout does not report %s:\n%s", path, stdout.String())
 		}
+	}
+
+	macConfig, err := os.ReadFile(filepath.Join(out, "macos", "codex-config-CCWB.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	winConfig, err := os.ReadFile(filepath.Join(out, "windows", "codex-config-CCWB.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !bytes.Equal(macConfig, winConfig) || !bytes.Contains(winConfig, []byte("[mcp_servers.jarvis-registry]")) {
+		t.Error("both platforms should output the same Codex MCP snippet")
+	}
+}
+
+func TestRunOmitsUnconfiguredCodexMCP(t *testing.T) {
+	for _, mode := range []string{"no MCP entries", "Codex disabled", "Codex omitted"} {
+		t.Run(mode, func(t *testing.T) {
+			cfg, err := policy.Load("testdata/config.json", policy.Options{})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			switch mode {
+			case "no MCP entries":
+				cfg.Codex.MCPServers = nil
+			case "Codex disabled":
+				*cfg.Codex.Enabled = false
+			case "Codex omitted":
+				cfg.Codex = nil
+			}
+
+			raw, err := json.Marshal(cfg)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			configPath := filepath.Join(t.TempDir(), "config.json")
+			if err := os.WriteFile(configPath, raw, 0o600); err != nil {
+				t.Fatal(err)
+			}
+
+			for _, example := range []bool{false, true} {
+				out := t.TempDir()
+				args := []string{"-config", configPath, "-out", out}
+
+				if example {
+					args = append(args, "-example")
+				}
+
+				var stdout, stderr bytes.Buffer
+				if code := run(args, &stdout, &stderr); code != 0 {
+					t.Fatalf("exit code %d, stderr: %s", code, stderr.String())
+				}
+
+				for _, name := range []string{"macos/codex-config-CCWB.toml", "windows/codex-config-CCWB.toml", "codex-config-CCWB.example.toml"} {
+					if _, err := os.Stat(filepath.Join(out, filepath.FromSlash(name))); !os.IsNotExist(err) {
+						t.Errorf("unexpected MCP output %s without MCP entries: %v", name, err)
+					}
+				}
+			}
+		})
 	}
 }
 

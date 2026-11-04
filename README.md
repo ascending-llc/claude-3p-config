@@ -6,17 +6,19 @@ This repository sets up **Claude Desktop**, the **Claude Code CLI**, and optiona
 | --- | --- |
 | Claude Desktop policy | Uses Desktop's built-in IAM Identity Center sign-in, calls Bedrock through your application inference profiles (AIPs), and adds managed MCP connectors |
 | Claude Code policy | Points Claude Code at Bedrock through the `CCWB` AWS CLI profile, routes every model alias to your AIPs, and runs `aws sso login` when credentials expire |
-| Codex managed configuration | Points local Codex clients at Bedrock Runtime, sets a default OpenAI model, and enforces the provider, AWS profile and Region through `requirements.toml` |
+| Codex managed configuration | Sets Bedrock Runtime, model defaults and AWS requirements through `requirements.toml`; optionally adds independent remote MCP connections through the macOS profile or a configuration snippet |
 | AWS CLI profile | The `[profile CCWB]` and `[sso-session ccwb]` sections that Claude Code and Codex sign in with |
 
 The generator `ccwb-policy` renders them from one `config/config.json`:
 
 | Platform | Output | Status |
 | --- | --- | --- |
-| macOS | Claude and Codex `.mobileconfig` profiles, the Codex `requirements.toml`, and `aws-config-CCWB.ini` | Claude tested end to end; Codex managed profile tested with the CLI and the ChatGPT app; some checks still open (see the test plan) |
-| Windows | Claude `.reg`, the Codex `requirements.toml`, and `aws-config-CCWB.ini` | Claude tested end to end; Codex tested with the CLI and the ChatGPT app; some checks still open |
+| macOS | Claude and Codex `.mobileconfig` profiles, Codex `requirements.toml`, an optional `codex-config-CCWB.toml` MCP snippet, and `aws-config-CCWB.ini` | Existing Bedrock configuration tested; the new MCP profile has not been installed for end-to-end testing (see the test plan) |
+| Windows | Claude `.reg`, Codex `requirements.toml`, an optional `codex-config-CCWB.toml` MCP snippet, and `aws-config-CCWB.ini` | Existing Bedrock configuration tested; the new MCP deployment and sign-in remain untested on Windows |
 
 Codex uses its built-in `amazon-bedrock-runtime` provider; no local translation gateway is required. Client configuration selects the provider and default model, while IAM or an SCP remains the security boundary that restricts which models can actually be invoked.
+
+Configure Codex MCP connections in `codex.mcp_servers`, separately from Claude Desktop's `desktop.mcp_servers`. Each entry needs a `name` and an HTTPS `url`; omit the list or leave it empty when unused. On Windows, merge the MCP snippet into the user configuration without replacing the whole `config.toml`. The generator only writes artifacts; it does not install profiles, change client configuration or sign users in.
 
 If you'd rather run a central gateway than configure each machine, the Claude apps gateway, and a model gateway for Codex, are the alternatives. Neither is covered here.
 

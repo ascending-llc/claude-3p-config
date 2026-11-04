@@ -80,6 +80,12 @@ Only do this when your organization has approved Codex on Bedrock and provided `
 
 The managed profile selects the Bedrock provider and default model. When AWS credentials expire, Codex re-runs the SSO sign-in automatically (`auth_refresh`) and continues once you complete it, like Claude Code. IAM or an SCP—not the client model picker—decides which models are actually allowed. You do not need to sign out of ChatGPT.
 
+If your administrator configured Codex MCP, the connection settings are included in `config_toml_base64` in the same Codex profile; no user file merge is needed. After restarting, run `codex mcp list` to check for the server. For OAuth, run `codex mcp login jarvis-registry` (substitute the server name as needed) and complete browser sign-in, or authenticate in the client's MCP settings. MCP sign-in is separate from AWS and Claude Desktop. An `enabled` entry confirms configuration only, not successful authentication or tool calls.
+
+For file-based deployment instead of a profile, IT must merge the server tables from `codex-config-CCWB.toml` into `~/.codex/config.toml`, or the file in a custom `CODEX_HOME`. Preserve existing content; update `url` and `enabled` in matching HTTP tables without duplicating headers or replacing the whole file.
+
+If a matching table previously used `command` to start a local stdio server, remove its stdio-specific fields (`command`, `args`, `env`, `env_vars`, `cwd`) before switching to HTTP. Preserve applicable general settings and other servers. Keeping both `command` and `url` prevents configuration loading.
+
 ## Sign out
 
 - **Claude Desktop:** sign out in the app.
@@ -92,6 +98,8 @@ The two sign-ins are independent; signing out of one doesn't affect the other.
 1. **System Settings → General → Device Management**: select the Claude profile and click **−**. If Codex was enabled, remove **Codex on Amazon Bedrock (CCWB)** separately. Quit and reopen the affected apps.
 2. Remove the `[sso-session ccwb]` and `[profile CCWB]` sections from `~/.aws/config`.
 
+If you manually merged the Codex MCP snippet, also remove the server tables added by that deployment. Removing the profile alone does not remove connections from user files. Preserve other servers, `auth.json`, plugins and project settings.
+
 ## Troubleshooting
 
 | Problem | What to do |
@@ -103,6 +111,8 @@ The two sign-ins are independent; signing out of one doesn't affect the other.
 | Claude Code: `403 … not authorized … with an explicit deny` | You asked for a model outside your organization's AIPs, for example with `--model`. Use `/model` to pick one of your organization's models |
 | `/status` doesn't list `Enterprise managed settings (plist)` | The profile isn't installed for your user; repeat step 2 |
 | Codex `/status` doesn't show `amazon-bedrock-runtime` | Check that the separate Codex profile is installed and that the client was fully restarted |
+| A Codex MCP server is missing or disabled | Check that the Codex profile contains `config_toml_base64` and the client was restarted. For file-based deployment, check the merge target. Any organizational MCP allowlist must also allow the server name and URL |
+| Codex lists the MCP server, but its tools are unavailable | Complete that server's MCP OAuth sign-in and check connection errors; AWS sign-in does not replace MCP sign-in |
 | Codex CLI: `This chat uses model provider "openai", but your organization requires "amazon-bedrock-runtime"` | Quit the ChatGPT app, run `codex app-server daemon restart`, then start `codex` again |
 | The ChatGPT app can't renew the AWS sign-in because it can't find `aws` | The app looks for `aws` on your login shell's `PATH`. Run `$SHELL -ilc 'command -v aws'` in Terminal; if it prints nothing, add the AWS CLI's folder to `PATH` in your shell startup file, then quit and reopen the app |
 | Codex gets `AccessDenied` although STS works | STS proves identity only. Send the model ID, Region, error and Request ID to the AWS administrator; never send credentials |

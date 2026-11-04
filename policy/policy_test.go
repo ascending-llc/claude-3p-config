@@ -38,6 +38,7 @@ func TestRenderMatchesGolden(t *testing.T) {
 		"aws-config-CCWB.ini":          artifacts.AWSConfig,
 		"Codex-CCWB.mobileconfig":      artifacts.CodexMobileconfig,
 		"codex-requirements-CCWB.toml": artifacts.CodexRequirements,
+		"codex-config-CCWB.toml":       artifacts.CodexConfig,
 	} {
 		path := filepath.Join("testdata", "golden", name)
 		if *update {
@@ -155,13 +156,6 @@ func TestCodexMobileconfigIsValidProfile(t *testing.T) {
 		t.Errorf("PayloadScope = %q, want User", profile.PayloadScope)
 	}
 
-	// Codex decodes the key as Base64 TOML; it must round-trip to the file
-	// that Windows and non-MDM macOS installs use. config_toml_base64 would
-	// carry the legacy managed config, which this generator no longer writes.
-	if _, ok := profile.PayloadContent[0]["config_toml_base64"]; ok {
-		t.Error("payload has config_toml_base64; the defaults belong in the requirements")
-	}
-
 	encoded, _ := profile.PayloadContent[0]["requirements_toml_base64"].(string)
 
 	got, decodeErr := base64.StdEncoding.DecodeString(encoded)
@@ -171,6 +165,139 @@ func TestCodexMobileconfigIsValidProfile(t *testing.T) {
 
 	if !bytes.Equal(got, artifacts.CodexRequirements) {
 		t.Errorf("requirements_toml_base64 decodes to\n%s\nwant\n%s", got, artifacts.CodexRequirements)
+	}
+
+	encoded, ok := profile.PayloadContent[0]["config_toml_base64"].(string)
+	if !ok || encoded == "" {
+		t.Fatal("missing config_toml_base64 for MCP connections")
+	}
+
+	got, decodeErr = base64.StdEncoding.DecodeString(encoded)
+	if decodeErr != nil {
+		t.Fatalf("config_toml_base64: %s", decodeErr.Error())
+	}
+
+	want := `[mcp_servers.jarvis-registry]
+url = "https://mcp.example.com/codex?team=a&b=\"c\""
+enabled = true
+
+[mcp_servers.codex-tools]
+url = "https://tools.example.com/codex"
+enabled = true
+`
+	if string(got) != want {
+		t.Errorf("config_toml_base64 decodes to\n%s\nwant\n%s", got, want)
+	}
+
+	if !bytes.Equal(got, artifacts.CodexConfig) {
+		t.Error("profile MCP configuration differs from the standalone TOML snippet")
+	}
+
+	if bytes.Contains(artifacts.CodexRequirements, []byte("mcp_servers")) {
+		t.Error("MCP connection configuration must not be written to requirements.toml")
+	}
+}
+
+func TestRenderOmitsCodexMCPWhenNotConfigured(t *testing.T) {
+	for _, servers := range [][]CodexMCPServer{nil, {}} {
+		cfg, err := Load(validConfig, Options{})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		withMCP, err := Render(cfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		cfg.Codex.MCPServers = servers
+
+		artifacts, err := Render(cfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if artifacts.CodexConfig != nil || bytes.Contains(artifacts.CodexMobileconfig, []byte("config_toml_base64")) {
+			t.Error("rendered connection configuration without MCP entries")
+		}
+
+		if !bytes.Equal(artifacts.CodexRequirements, withMCP.CodexRequirements) {
+			t.Error("MCP configuration changed the Bedrock requirements")
+		}
+
+		if !bytes.Equal(artifacts.Mobileconfig, withMCP.Mobileconfig) || !bytes.Equal(artifacts.Reg, withMCP.Reg) || !bytes.Equal(artifacts.AWSConfig, withMCP.AWSConfig) {
+			t.Error("Codex MCP configuration changed Claude or AWS artifacts")
+		}
+	}
+}
+
+func TestCodexMCPIsIndependentOfDesktop(t *testing.T) {
+	cfg, err := Load(validConfig, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want, err := Render(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cfg.Desktop.MCPServers = nil
+
+	got, err := Render(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !bytes.Equal(got.CodexConfig, want.CodexConfig) || !bytes.Equal(got.CodexMobileconfig, want.CodexMobileconfig) {
+		t.Error("Claude Desktop MCP entries affected Codex configuration")
+	}
+
+	cfg.Desktop.MCPServers = []MCPServer{{Name: cfg.Codex.MCPServers[0].Name, URL: cfg.Codex.MCPServers[0].URL}}
+
+	raw, err := json.Marshal(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := Parse(bytes.NewReader(raw), Options{}); err != nil {
+		t.Fatalf("both clients should accept the same MCP server name: %s", err.Error())
+	}
+}
+
+func TestParseRejectsInvalidCodexMCP(t *testing.T) {
+	raw, err := os.ReadFile(validConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name    string
+		old     string
+		value   string
+		wantErr string
+	}{
+		{name: "HTTP URL", old: "https://mcp.example.com/codex", value: "http://mcp.example.com/codex", wantErr: "codex.mcp_servers[0].url: must be an https URL"},
+		{name: "empty URL", old: `https://tools.example.com/codex`, value: "", wantErr: "codex.mcp_servers[1].url: must be an https URL"},
+		{name: "invalid name", old: `"name": "jarvis-registry"`, value: `"name": "-registry"`, wantErr: "codex.mcp_servers[0].name: must be letters"},
+		{name: "name with TOML separator", old: `"name": "jarvis-registry"`, value: `"name": "registry.tools"`, wantErr: "codex.mcp_servers[0].name: must be letters"},
+		{name: "duplicate name", old: `"name": "codex-tools"`, value: `"name": "jarvis-registry"`, wantErr: `codex.mcp_servers[1].name: "jarvis-registry" is listed more than once`},
+		{name: "URL placeholder", old: "https://tools.example.com/codex", value: "REPLACE_WITH_CODEX_MCP_SERVER_URL", wantErr: "codex.mcp_servers[1].url: replace the placeholder"},
+		{name: "reject Claude OAuth fields", old: `"name": "jarvis-registry"`, value: `"name": "jarvis-registry", "oauth": {"client_id": "claude-desktop"}`, wantErr: `unknown field "oauth"`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			input := strings.Replace(string(raw), tt.old, tt.value, 1)
+			if input == string(raw) {
+				t.Fatal("test input was not modified")
+			}
+
+			_, err := Parse(strings.NewReader(input), Options{})
+			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("got %v, want an error containing %q", err, tt.wantErr)
+			}
+		})
 	}
 }
 
@@ -199,7 +326,7 @@ func TestRenderOmitsCodexUnlessEnabled(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if artifacts.CodexMobileconfig != nil || artifacts.CodexRequirements != nil {
+			if artifacts.CodexMobileconfig != nil || artifacts.CodexRequirements != nil || artifacts.CodexConfig != nil {
 				t.Error("rendered Codex artifacts although Codex is not enabled")
 			}
 		})
@@ -623,7 +750,7 @@ func TestPlaceholders(t *testing.T) {
 		t.Fatal("example config loaded without AllowPlaceholders")
 	}
 
-	for _, field := range []string{"aws.account_id", "aws.sso_start_url", "aws.sso_role_name", "models[0].aip_arn", "models[1].aip_arn", "models[2].aip_arn", "desktop.mcp_servers[0].url", "desktop.mcp_servers[0].oauth.client_id"} {
+	for _, field := range []string{"aws.account_id", "aws.sso_start_url", "aws.sso_role_name", "models[0].aip_arn", "models[1].aip_arn", "models[2].aip_arn", "codex.mcp_servers[0].url", "desktop.mcp_servers[0].url", "desktop.mcp_servers[0].oauth.client_id"} {
 		if !strings.Contains(err.Error(), field+": replace the placeholder") {
 			t.Errorf("error does not flag %s:\n%s", field, err.Error())
 		}

@@ -30,7 +30,13 @@
   "codex": {
     "enabled": true,
     "default_model": "global.openai.gpt-6.1-terra",
-    "reasoning_effort": "medium"
+    "reasoning_effort": "medium",
+    "mcp_servers": [
+      {
+        "name": "jarvis-registry",
+        "url": "REPLACE_WITH_CODEX_MCP_SERVER_URL"
+      }
+    ]
   },
   "desktop": {
     "mcp_servers": [
