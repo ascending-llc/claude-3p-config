@@ -1,6 +1,6 @@
 # Claude and Codex on Amazon Bedrock, configuration only
 
-This repository sets up **Claude Desktop**, the **Claude Code CLI**, and optionally local **Codex/ChatGPT Work** clients to use models on Amazon Bedrock in your own AWS account. People sign in through **AWS IAM Identity Center**, which can federate to Entra ID or another identity provider. Nothing is installed except configuration:
+This repository sets up **Claude Desktop**, the **Claude Code CLI**, and local **Codex/ChatGPT Work** clients selected on the command line to use models on Amazon Bedrock in your own AWS account. People sign in through **AWS IAM Identity Center**, which can federate to Entra ID or another identity provider. Nothing is installed except configuration:
 
 | Piece | What it does |
 | --- | --- |
@@ -9,7 +9,9 @@ This repository sets up **Claude Desktop**, the **Claude Code CLI**, and optiona
 | Codex managed configuration | Points local Codex clients at Bedrock Runtime, sets a default OpenAI model, and enforces the provider, AWS profile and Region through `requirements.toml` |
 | AWS CLI profile | The `[profile CCWB]` and `[sso-session ccwb]` sections that Claude Code and Codex sign in with |
 
-The generator `ccwb-policy` renders them from one `config/config.json`:
+The generator `ccwb-policy` renders the selected products from one `config/config.json`. Choose `claude` for Claude Desktop and Claude Code, `codex` for Codex, or both.
+
+The status below records historical validation. See the [test plan](docs/test-plan.md#results) for AS-1975 results and remaining checks.
 
 | Platform | Output | Status |
 | --- | --- | --- |
@@ -26,16 +28,19 @@ You need Go 1.24 or later.
 
 ```bash
 cp config/config.example.json config/config.json   # then fill in every REPLACE_WITH_ value
-make policies                                       # or: go run ./cmd/ccwb-policy
+make policies PRODUCTS="claude codex"
+# Or generate one product
+go run ./cmd/ccwb-policy codex
 ```
 
-Then follow the guide for your platform:
+The config groups shared settings under `aws` and `macos_profile`, and product settings under `claude` and `codex`. Only selected products need valid sections. Rewrite any config from an earlier setup using the new example.
+
+For implementation testing, follow the location-specific limits in the test plan before installing policies or signing in. Then follow the guide for your platform.
 
 - [Admin guide](docs/admin-guide.md): AWS prerequisites, the config fields, generating and distributing the policies
 - [macOS user guide](docs/macos-user-guide.md): install and sign in on a Mac
 - [Windows user guide](docs/windows-user-guide.md): install and sign in on Windows
 - [Test plan](docs/test-plan.md): what was tested, and the checklist for new platforms or changes
-- [Jarvis Registry static OAuth client](docs/jarvis-static-oauth-client.md): what the Jarvis Registry MCP server needs for Claude Desktop sign-in
 
 Without Go, copy the committed examples in [`examples/`](examples/) and replace each `REPLACE_WITH_` value by hand. The examples are rendered from [`config/config.example.json`](config/config.example.json).
 
@@ -49,7 +54,7 @@ policy/               config validation and rendering of Claude, Codex and AWS a
 internal/plist/       XML property list encoder for the .mobileconfig
 config/               config.example.json (committed) and config.json (yours, ignored)
 examples/             artifacts rendered from config.example.json
-docs/                 admin guide, user guides, test plan, Jarvis Registry OAuth brief
+docs/                 admin guide, user guides, test plan
 ```
 
 ## Development

@@ -1,6 +1,7 @@
 // Package policy turns one deployment config into the managed policies that
 // point Claude Desktop and Claude Code at Amazon Bedrock through AWS IAM
-// Identity Center, plus the AWS CLI profile Claude Code signs in with.
+// Identity Center and the shared AWS CLI profile. Codex requirements are
+// rendered when codex is selected.
 package policy
 
 import (
@@ -9,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -20,22 +22,21 @@ import (
 type (
 	// Config is the deployment configuration, normally config/config.json.
 	Config struct {
-		AWS     AWS     `json:"aws"`
-		Profile Profile `json:"profile"`
-		Models  []Model `json:"models"`
-		// Codex configures managed local Codex clients. Leave it unset to render
-		// only the existing Claude and AWS artifacts.
+		// Claude is required when Claude policies are selected and nil after Parse otherwise.
+		Claude *Claude `json:"claude,omitempty"`
+		// Codex is required when Codex policies are selected and nil after Parse otherwise.
 		Codex *Codex `json:"codex,omitempty"`
-		// DefaultTier is the tier both apps start with. It defaults to TierSonnet.
-		DefaultTier string  `json:"default_tier,omitempty"`
-		Desktop     Desktop `json:"desktop"`
+		// AWS contains the shared account and sign-in settings.
+		AWS AWS `json:"aws"`
+		// MacOSProfile identifies each product's macOS configuration profile.
+		MacOSProfile MacOSProfile `json:"macos_profile"`
 	}
 
 	// AWS holds the account, regions and IAM Identity Center sign-in details.
 	AWS struct {
-		// AccountID is the AWS account that owns the application inference profiles.
+		// AccountID is the AWS account users sign in to.
 		AccountID string `json:"account_id"`
-		// BedrockRegion is the region Claude Desktop and Claude Code call Bedrock in.
+		// BedrockRegion is the region the selected clients call Bedrock in.
 		BedrockRegion string `json:"bedrock_region"`
 		// SSOStartURL is the IAM Identity Center access portal URL.
 		SSOStartURL string `json:"sso_start_url"`
@@ -45,10 +46,18 @@ type (
 		SSORoleName string `json:"sso_role_name"`
 	}
 
-	// Model maps one model tier to the application inference profile (AIP) that serves it.
+	// Claude holds settings shared by Claude Desktop and Claude Code.
+	Claude struct {
+		// Models maps each configured tier to its application inference profile.
+		Models map[string]Model `json:"models"`
+		// DefaultTier is the tier both clients start with. It defaults to TierSonnet.
+		DefaultTier string `json:"default_tier,omitempty"`
+		// DesktopMCPServers are Jarvis Registry connectors for Claude Desktop.
+		DesktopMCPServers []MCPServer `json:"desktop_mcp_servers,omitempty"`
+	}
+
+	// Model describes the application inference profile (AIP) for one model tier.
 	Model struct {
-		// Tier is TierOpus, TierSonnet or TierHaiku.
-		Tier string `json:"tier"`
 		// AIPARN is the application inference profile ARN.
 		AIPARN string `json:"aip_arn"`
 		// AnthropicModelID is the Anthropic model ID the AIP routes to, such as claude-sonnet-5.
@@ -57,64 +66,37 @@ type (
 		Label string `json:"label,omitempty"`
 	}
 
-	// Codex holds the managed defaults for Codex on Amazon Bedrock. When it is
-	// nil or explicitly disabled, Render omits every Codex artifact.
+	// Codex holds the managed defaults for Codex on Amazon Bedrock.
 	Codex struct {
-		// Enabled controls whether Codex artifacts are rendered. A pointer keeps
-		// an omitted JSON field distinguishable from an explicit false value.
-		Enabled *bool `json:"enabled"`
 		// DefaultModel is one approved Bedrock Runtime inference profile ID.
 		DefaultModel string `json:"default_model"`
 		// ReasoningEffort is the default effort shared by the approved models.
 		ReasoningEffort string `json:"reasoning_effort"`
 	}
 
-	// Desktop holds settings that apply to Claude Desktop only.
-	Desktop struct {
-		// MCPServers are the remote MCP servers provisioned as managed connectors.
-		MCPServers []MCPServer `json:"mcp_servers,omitempty"`
-	}
-
-	// MCPServer is a remote MCP server reached over streamable HTTP.
+	// MCPServer is a Jarvis Registry MCP endpoint reached over streamable HTTP.
 	MCPServer struct {
-		// OAuth makes Claude Desktop run the server's MCP OAuth sign-in. Leave
-		// it unset for a server that needs no sign-in.
-		OAuth *OAuth `json:"oauth,omitempty"`
 		// Name is the connector name users see in Claude Desktop.
 		Name string `json:"name"`
 		// URL is the server's final https address. Claude Desktop doesn't follow redirects.
 		URL string `json:"url"`
 	}
 
-	// OAuth is the pre-registered public OAuth client Claude Desktop signs in
-	// to an MCP server with. Desktop's automatic client registration always
-	// listens on port 53280, which Windows can reserve for WSL2 or Hyper-V, and
-	// Desktop accepts another callback port only with a client ID.
-	OAuth struct {
-		// ClientID is the client registered at the server's authorization
-		// server, with redirect URI http://127.0.0.1:<CallbackPort>/callback.
-		ClientID string `json:"client_id"`
-		// Scope is the space-separated scopes Desktop requests. When it's
-		// empty, Desktop requests every scope the server advertises.
-		Scope string `json:"scope,omitempty"`
-		// CallbackPort is the loopback port Desktop receives the sign-in on. It
-		// defaults to 47280 and must be below Windows' dynamic port range.
-		CallbackPort int `json:"callback_port,omitempty"`
-	}
-
-	// Profile identifies the generated macOS configuration profile.
-	Profile struct {
-		// Identifier is the reverse-DNS profile identifier. Keep it stable so a
-		// newer profile replaces the installed one instead of adding a second.
-		Identifier string `json:"identifier"`
-		// DisplayName is the profile name shown in System Settings.
-		DisplayName string `json:"display_name"`
+	// MacOSProfile supplies the shared identity of the macOS configuration profiles.
+	MacOSProfile struct {
+		// IdentifierPrefix is the reverse-DNS prefix used to derive each product's identifier.
+		IdentifierPrefix string `json:"identifier_prefix"`
 		// Organization is shown as the profile's publisher.
 		Organization string `json:"organization"`
 	}
 
-	// Options controls how a config is validated.
+	// Product identifies a client product whose policies can be generated.
+	Product string
+
+	// Options controls which products are selected and how their config is validated.
 	Options struct {
+		// Products lists the products to validate and render. At least one is required.
+		Products []Product
 		// AllowPlaceholders accepts REPLACE_WITH_ values, for rendering the committed examples.
 		AllowPlaceholders bool
 	}
@@ -135,12 +117,10 @@ const (
 	// placeholderMarker marks values in config.example.json that a deployer must replace.
 	placeholderMarker = "REPLACE_WITH_"
 
-	// defaultCallbackPort is the OAuth callback port when OAuth.CallbackPort is
-	// unset. It's in an unassigned IANA block and below the dynamic range that
-	// Windows (49152-65535 by default) reserves ports from for WSL2 and Hyper-V.
-	defaultCallbackPort = 47280
-	minCallbackPort     = 1024
-	maxCallbackPort     = 49151
+	// ProductClaude selects both Claude Desktop and Claude Code.
+	ProductClaude Product = "claude"
+	// ProductCodex selects local Codex clients.
+	ProductCodex Product = "codex"
 )
 
 var (
@@ -156,9 +136,6 @@ var (
 	// them a user may invoke is for IAM/SCP to decide, not this list.
 	codexModelPattern = regexp.MustCompile(`^(global|us)\.openai\.[a-z0-9]+([.-][a-z0-9]+)*$`)
 	serverNamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]*$`)
-	// clientIDPattern and scopePattern follow the client_id and scope syntax of RFC 6749 appendix A.
-	clientIDPattern   = regexp.MustCompile(`^[\x21-\x7E]+$`)
-	scopePattern      = regexp.MustCompile(`^[\x21\x23-\x5B\x5D-\x7E]+( [\x21\x23-\x5B\x5D-\x7E]+)*$`)
 	identifierPattern = regexp.MustCompile(`^[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$`)
 	// codexReasoningEfforts are the effort values Codex knows; each model
 	// supports a subset.
@@ -194,34 +171,44 @@ func Parse(r io.Reader, opts Options) (Config, error) {
 		return Config{}, fmt.Errorf("decoding config: %s", err.Error())
 	}
 
-	if dec.More() {
+	var trailing json.RawMessage
+	if err := dec.Decode(&trailing); err != io.EOF {
 		return Config{}, errors.New("decoding config: unexpected data after the JSON object")
 	}
 
 	v := validator{allowPlaceholders: opts.AllowPlaceholders}
-	v.validate(cfg)
+	v.validate(cfg, opts.Products)
 
 	if len(v.errs) > 0 {
 		return Config{}, fmt.Errorf("invalid config:\n%s", errors.Join(v.errs...).Error())
 	}
 
+	if !slices.Contains(opts.Products, ProductClaude) {
+		cfg.Claude = nil
+	}
+
+	if !slices.Contains(opts.Products, ProductCodex) {
+		cfg.Codex = nil
+	}
+
 	return cfg, nil
+}
+
+// Valid reports whether p is a supported product.
+func (p Product) Valid() bool {
+	return p == ProductClaude || p == ProductCodex
 }
 
 // model returns the model for tier, and false when the tier isn't configured.
 // Validation guarantees at most one model per tier, and always sonnet and haiku.
-func (c Config) model(tier string) (Model, bool) {
-	for _, m := range c.Models {
-		if m.Tier == tier {
-			return m, true
-		}
-	}
+func (c Claude) model(tier string) (Model, bool) {
+	m, ok := c.Models[tier]
 
-	return Model{}, false
+	return m, ok
 }
 
 // defaultTier returns DefaultTier, or TierSonnet when it isn't set.
-func (c Config) defaultTier() string {
+func (c Claude) defaultTier() string {
 	if c.DefaultTier == "" {
 		return TierSonnet
 	}
@@ -229,54 +216,56 @@ func (c Config) defaultTier() string {
 	return c.DefaultTier
 }
 
-// orderedModels returns the configured models with the default tier first,
+// orderedModels returns configured tier keys with the default tier first,
 // then the others in tier order. Claude Desktop treats the first as its default.
-func (c Config) orderedModels() []Model {
+func (c Claude) orderedModels() []string {
 	def := c.defaultTier()
-	m, _ := c.model(def)
-	models := []Model{m}
+	models := []string{def}
 
 	for _, tier := range tiers {
-		if m, ok := c.model(tier); ok && tier != def {
-			models = append(models, m)
+		if _, ok := c.model(tier); ok && tier != def {
+			models = append(models, tier)
 		}
 	}
 
 	return models
 }
 
-// codexEnabled reports whether the deployment asks Render for Codex
-// artifacts. Validation guarantees Enabled is present when Codex is present.
-func (c Config) codexEnabled() bool {
-	return c.Codex != nil && c.Codex.Enabled != nil && *c.Codex.Enabled
-}
+func (v *validator) validate(cfg Config, products []Product) {
+	if len(products) == 0 {
+		v.fail("products", "must select at least one of claude or codex")
+	}
 
-func (v *validator) validate(cfg Config) {
+	for _, product := range products {
+		if !product.Valid() {
+			v.fail("products", fmt.Sprintf("unknown product %q; must be claude or codex", product))
+		}
+	}
+
 	v.validateAWS(cfg.AWS)
-	v.validateModels(cfg.Models, cfg.AWS)
-	v.validateDefaultTier(cfg)
-	v.validateCodex(cfg.Codex)
-	v.validateMCPServers(cfg.Desktop.MCPServers)
-	v.field("profile.identifier", cfg.Profile.Identifier, pattern(identifierPattern, "a reverse-DNS identifier such as com.example.claude"))
-	v.field("profile.display_name", cfg.Profile.DisplayName, nonEmpty)
-	v.field("profile.organization", cfg.Profile.Organization, nonEmpty)
+	v.field("macos_profile.identifier_prefix", cfg.MacOSProfile.IdentifierPrefix, pattern(identifierPattern, "a reverse-DNS identifier such as com.example.ccwb"))
+	v.field("macos_profile.organization", cfg.MacOSProfile.Organization, nonEmpty)
+
+	if slices.Contains(products, ProductClaude) {
+		if cfg.Claude == nil {
+			v.fail("claude", "is required when claude is selected")
+		} else {
+			v.validateModels(cfg.Claude.Models, cfg.AWS)
+			v.validateDefaultTier(*cfg.Claude)
+			v.validateMCPServers(cfg.Claude.DesktopMCPServers)
+		}
+	}
+
+	if slices.Contains(products, ProductCodex) {
+		if cfg.Codex == nil {
+			v.fail("codex", "is required when codex is selected")
+		} else {
+			v.validateCodex(*cfg.Codex)
+		}
+	}
 }
 
-func (v *validator) validateCodex(c *Codex) {
-	if c == nil {
-		return
-	}
-
-	if c.Enabled == nil {
-		v.fail("codex.enabled", "is required")
-
-		return
-	}
-
-	if !*c.Enabled {
-		return
-	}
-
+func (v *validator) validateCodex(c Codex) {
 	v.field("codex.default_model", c.DefaultModel, pattern(codexModelPattern,
 		"a global. or us. Bedrock Runtime inference profile ID of an OpenAI model, such as global.openai.gpt-6.1-terra"))
 
@@ -294,25 +283,22 @@ func (v *validator) validateAWS(a AWS) {
 	v.field("aws.sso_role_name", a.SSORoleName, pattern(roleNamePattern, "a permission set name"))
 }
 
-func (v *validator) validateModels(models []Model, a AWS) {
-	seen := map[string]bool{}
+func (v *validator) validateModels(models map[string]Model, a AWS) {
+	for _, tier := range slices.Sorted(maps.Keys(models)) {
+		m := models[tier]
+		path := "claude.models." + tier
 
-	for i, m := range models {
-		path := fmt.Sprintf("models[%d]", i)
+		if !slices.Contains(tiers, tier) {
+			v.fail(path, fmt.Sprintf("must be %q, %q or %q", TierOpus, TierSonnet, TierHaiku))
 
-		switch {
-		case !slices.Contains(tiers, m.Tier):
-			v.fail(path+".tier", fmt.Sprintf("must be %q, %q or %q", TierOpus, TierSonnet, TierHaiku))
-		case seen[m.Tier]:
-			v.fail(path+".tier", fmt.Sprintf("%q is listed more than once", m.Tier))
+			// The field checks assume a known tier and would only add misleading errors.
+			continue
 		}
-
-		seen[m.Tier] = true
 
 		v.field(path+".aip_arn", m.AIPARN, aipARN(a))
 		v.field(path+".anthropic_model_id", m.AnthropicModelID, func(id string) error {
-			if !modelIDPattern.MatchString(id) || !strings.Contains(id, m.Tier) {
-				return fmt.Errorf("must be an Anthropic model ID of the %s tier, such as claude-%s-5", m.Tier, m.Tier)
+			if !modelIDPattern.MatchString(id) || !strings.Contains(id, tier) {
+				return fmt.Errorf("must be an Anthropic model ID of the %s tier, such as claude-%s-5", tier, tier)
 			}
 
 			return nil
@@ -320,19 +306,19 @@ func (v *validator) validateModels(models []Model, a AWS) {
 	}
 
 	for _, tier := range []string{TierSonnet, TierHaiku} {
-		if !seen[tier] {
-			v.fail("models", fmt.Sprintf("must include a %s model", tier))
+		if _, ok := models[tier]; !ok {
+			v.fail("claude.models", fmt.Sprintf("must include a %s model", tier))
 		}
 	}
 }
 
-func (v *validator) validateDefaultTier(cfg Config) {
+func (v *validator) validateDefaultTier(cfg Claude) {
 	if cfg.DefaultTier == "" {
 		return
 	}
 
 	if _, ok := cfg.model(cfg.DefaultTier); !ok {
-		v.fail("default_tier", fmt.Sprintf("must be the tier of a configured model, got %q", cfg.DefaultTier))
+		v.fail("claude.default_tier", fmt.Sprintf("must be the tier of a configured model, got %q", cfg.DefaultTier))
 	}
 }
 
@@ -340,7 +326,7 @@ func (v *validator) validateMCPServers(servers []MCPServer) {
 	seen := map[string]bool{}
 
 	for i, s := range servers {
-		path := fmt.Sprintf("desktop.mcp_servers[%d]", i)
+		path := fmt.Sprintf("claude.desktop_mcp_servers[%d]", i)
 
 		v.field(path+".name", s.Name, pattern(serverNamePattern, "letters, digits, '-' and '_', starting with a letter or digit"))
 
@@ -351,24 +337,6 @@ func (v *validator) validateMCPServers(servers []MCPServer) {
 		seen[s.Name] = true
 
 		v.field(path+".url", s.URL, httpsURL)
-
-		if s.OAuth != nil {
-			v.validateOAuth(path+".oauth", *s.OAuth)
-		}
-	}
-}
-
-func (v *validator) validateOAuth(path string, o OAuth) {
-	v.field(path+".client_id", o.ClientID, pattern(clientIDPattern, "a client ID without spaces"))
-
-	if o.CallbackPort != 0 && (o.CallbackPort < minCallbackPort || o.CallbackPort > maxCallbackPort) {
-		v.fail(path+".callback_port", fmt.Sprintf(
-			"must be between %d and %d, below the dynamic port range Windows reserves ports from, got %d",
-			minCallbackPort, maxCallbackPort, o.CallbackPort))
-	}
-
-	if o.Scope != "" {
-		v.field(path+".scope", o.Scope, pattern(scopePattern, "space-separated OAuth scopes"))
 	}
 }
 

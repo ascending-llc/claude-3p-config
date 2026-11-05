@@ -6,47 +6,38 @@
     "sso_region": "us-east-1",
     "sso_role_name": "REPLACE_WITH_PERMISSION_SET_NAME"
   },
-  "models": [
-    {
-      "tier": "sonnet",
-      "aip_arn": "REPLACE_WITH_SONNET_AIP_ARN",
-      "anthropic_model_id": "claude-sonnet-5",
-      "label": "Sonnet"
-    },
-    {
-      "tier": "haiku",
-      "aip_arn": "REPLACE_WITH_HAIKU_AIP_ARN",
-      "anthropic_model_id": "claude-haiku-4-5-20251001",
-      "label": "Haiku"
-    },
-    {
-      "tier": "opus",
-      "aip_arn": "REPLACE_WITH_OPUS_AIP_ARN",
-      "anthropic_model_id": "claude-opus-5-5",
-      "label": "Opus"
-    }
-  ],
-  "default_tier": "sonnet",
-  "codex": {
-    "enabled": true,
-    "default_model": "global.openai.gpt-6.1-terra",
-    "reasoning_effort": "medium"
+  "macos_profile": {
+    "identifier_prefix": "com.example.ccwb",
+    "organization": "REPLACE_WITH_ORGANIZATION_NAME"
   },
-  "desktop": {
-    "mcp_servers": [
+  "claude": {
+    "default_tier": "sonnet",
+    "models": {
+      "sonnet": {
+        "aip_arn": "REPLACE_WITH_SONNET_AIP_ARN",
+        "anthropic_model_id": "claude-sonnet-5",
+        "label": "Sonnet"
+      },
+      "haiku": {
+        "aip_arn": "REPLACE_WITH_HAIKU_AIP_ARN",
+        "anthropic_model_id": "claude-haiku-4-5-20251001",
+        "label": "Haiku"
+      },
+      "opus": {
+        "aip_arn": "REPLACE_WITH_OPUS_AIP_ARN",
+        "anthropic_model_id": "claude-opus-5-5",
+        "label": "Opus"
+      }
+    },
+    "desktop_mcp_servers": [
       {
         "name": "jarvis-registry",
-        "url": "REPLACE_WITH_MCP_SERVER_URL",
-        "oauth": {
-          "client_id": "REPLACE_WITH_OAUTH_CLIENT_ID",
-          "scope": "mcp-proxy-ops"
-        }
+        "url": "REPLACE_WITH_MCP_SERVER_URL"
       }
     ]
   },
-  "profile": {
-    "identifier": "com.example.claude.ccwb",
-    "display_name": "Claude on Amazon Bedrock (CCWB)",
-    "organization": "REPLACE_WITH_ORGANIZATION_NAME"
+  "codex": {
+    "default_model": "global.openai.gpt-6.1-terra",
+    "reasoning_effort": "medium"
   }
 }

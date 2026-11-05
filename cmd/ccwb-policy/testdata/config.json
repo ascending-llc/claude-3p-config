@@ -6,39 +6,31 @@
     "sso_region": "us-east-2",
     "sso_role_name": "ClaudeBedrockUser"
   },
-  "models": [
-    {
-      "tier": "sonnet",
-      "aip_arn": "arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/sonnet0001",
-      "anthropic_model_id": "claude-sonnet-5",
-      "label": "Sonnet"
-    },
-    {
-      "tier": "haiku",
-      "aip_arn": "arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/haiku00001",
-      "anthropic_model_id": "claude-haiku-4-5-20251001"
-    },
-    {
-      "tier": "opus",
-      "aip_arn": "arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/opus000001",
-      "anthropic_model_id": "claude-opus-5-5",
-      "label": "Opus"
-    }
-  ],
-  "codex": {
-    "enabled": true,
-    "default_model": "us.openai.gpt-6.1-sol",
-    "reasoning_effort": "high"
+  "macos_profile": {
+    "identifier_prefix": "com.example.ccwb",
+    "organization": "Example"
   },
-  "desktop": {
-    "mcp_servers": [
+  "claude": {
+    "models": {
+      "sonnet": {
+        "aip_arn": "arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/sonnet0001",
+        "anthropic_model_id": "claude-sonnet-5",
+        "label": "Sonnet"
+      },
+      "haiku": {
+        "aip_arn": "arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/haiku00001",
+        "anthropic_model_id": "claude-haiku-4-5-20251001"
+      },
+      "opus": {
+        "aip_arn": "arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/opus000001",
+        "anthropic_model_id": "claude-opus-5-5",
+        "label": "Opus"
+      }
+    },
+    "desktop_mcp_servers": [
       {
         "name": "example-registry",
-        "url": "https://mcp.example.com/mcp?team=a&b=\"c\"",
-        "oauth": {
-          "client_id": "claude-desktop-ccwb",
-          "scope": "mcp-proxy-ops"
-        }
+        "url": "https://mcp.example.com/mcp?team=a&b=\"c\""
       },
       {
         "name": "static-tools",
@@ -46,9 +38,8 @@
       }
     ]
   },
-  "profile": {
-    "identifier": "com.example.claude.ccwb",
-    "display_name": "Example <Claude> & Bedrock",
-    "organization": "Example"
+  "codex": {
+    "default_model": "us.openai.gpt-6.1-sol",
+    "reasoning_effort": "high"
   }
 }

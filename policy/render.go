@@ -64,44 +64,57 @@ const (
 	ProfileName = "CCWB"
 	// SSOSessionName is the [sso-session] section the profile uses.
 	SSOSessionName = "ccwb"
+	// Display names for the managed profiles that use ProfileName.
+	claudeProfileDisplayName = "Claude on Amazon Bedrock (CCWB)"
+	codexProfileDisplayName  = "Codex on Amazon Bedrock (CCWB)"
+
+	// Jarvis Registry's built-in static Claude Desktop client fixes these OAuth
+	// values. Keep its callback below 49152, where Windows starts reserving
+	// dynamic ports for WSL2 and Hyper-V.
+	jarvisClientID     = "jarvis-registry-claude-desktop"
+	jarvisScope        = "mcp-proxy-ops"
+	jarvisCallbackPort = 47280
 
 	// Registry keys of the Windows policies.
 	desktopRegKey    = `HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Claude`
 	claudeCodeRegKey = `HKEY_LOCAL_MACHINE\SOFTWARE\Policies\ClaudeCode`
 )
 
-// Render builds every artifact from a config returned by Load or Parse.
+// Render builds artifacts for the selected products in a config returned by
+// Load or Parse, together with their shared AWS CLI profile.
 func Render(cfg Config) (Artifacts, error) {
-	desktop, err := desktopSettings(cfg)
-	if err != nil {
-		return Artifacts{}, err
-	}
+	artifacts := Artifacts{AWSConfig: renderAWSConfig(cfg.AWS)}
 
-	claudeCode := claudeCodeSettings(cfg)
-
-	mobileconfig, err := renderMobileconfig(cfg.Profile, desktop, claudeCode)
-	if err != nil {
-		return Artifacts{}, err
-	}
-
-	claudeCodeJSON, err := compactJSON(claudeCode)
-	if err != nil {
-		return Artifacts{}, err
-	}
-
-	artifacts := Artifacts{
-		Mobileconfig: mobileconfig,
-		Reg:          renderReg(desktop, claudeCodeJSON),
-		AWSConfig:    renderAWSConfig(cfg.AWS),
-	}
-
-	if cfg.codexEnabled() {
-		artifacts.CodexRequirements = renderCodexRequirements(cfg.AWS, *cfg.Codex)
-
-		artifacts.CodexMobileconfig, err = renderCodexMobileconfig(cfg.Profile, artifacts.CodexRequirements)
+	if cfg.Claude != nil {
+		desktop, err := desktopSettings(cfg.AWS, *cfg.Claude)
 		if err != nil {
 			return Artifacts{}, err
 		}
+
+		claudeCode := claudeCodeSettings(cfg.AWS, *cfg.Claude)
+
+		artifacts.Mobileconfig, err = renderMobileconfig(cfg.MacOSProfile, desktop, claudeCode)
+		if err != nil {
+			return Artifacts{}, err
+		}
+
+		claudeCodeJSON, err := compactJSON(claudeCode)
+		if err != nil {
+			return Artifacts{}, err
+		}
+
+		artifacts.Reg = renderReg(desktop, claudeCodeJSON)
+	}
+
+	if cfg.Codex != nil {
+		artifacts.CodexRequirements = renderCodexRequirements(cfg.AWS, *cfg.Codex)
+
+		mobileconfig, err := renderCodexMobileconfig(cfg.MacOSProfile, artifacts.CodexRequirements)
+		if err != nil {
+			return Artifacts{}, err
+		}
+
+		artifacts.CodexMobileconfig = mobileconfig
 	}
 
 	return artifacts, nil
@@ -110,17 +123,19 @@ func Render(cfg Config) (Artifacts, error) {
 // desktopSettings returns Claude Desktop's managed configuration. Every value
 // is a string, because the configuration profile and the registry both store
 // the JSON-valued keys as strings.
-func desktopSettings(cfg Config) (map[string]string, error) {
-	ordered := cfg.orderedModels()
+func desktopSettings(aws AWS, claude Claude) (map[string]string, error) {
+	ordered := claude.orderedModels()
 	models := make([]desktopModel, 0, len(ordered))
 
-	for _, m := range ordered {
+	for _, tier := range ordered {
+		m := claude.Models[tier]
+
 		label := m.Label
 		if label == "" {
-			label = strings.ToUpper(m.Tier[:1]) + m.Tier[1:]
+			label = strings.ToUpper(tier[:1]) + tier[1:]
 		}
 
-		models = append(models, desktopModel{Name: m.AIPARN, LabelOverride: label, AnthropicFamilyTier: m.Tier})
+		models = append(models, desktopModel{Name: m.AIPARN, LabelOverride: label, AnthropicFamilyTier: tier})
 	}
 
 	modelsJSON, err := compactJSON(models)
@@ -131,18 +146,18 @@ func desktopSettings(cfg Config) (map[string]string, error) {
 	settings := map[string]string{
 		"inferenceProvider":            "bedrock",
 		"inferenceCredentialKind":      "interactive",
-		"inferenceBedrockRegion":       cfg.AWS.BedrockRegion,
-		"inferenceBedrockSsoStartUrl":  cfg.AWS.SSOStartURL,
-		"inferenceBedrockSsoRegion":    cfg.AWS.SSORegion,
-		"inferenceBedrockSsoAccountId": cfg.AWS.AccountID,
-		"inferenceBedrockSsoRoleName":  cfg.AWS.SSORoleName,
+		"inferenceBedrockRegion":       aws.BedrockRegion,
+		"inferenceBedrockSsoStartUrl":  aws.SSOStartURL,
+		"inferenceBedrockSsoRegion":    aws.SSORegion,
+		"inferenceBedrockSsoAccountId": aws.AccountID,
+		"inferenceBedrockSsoRoleName":  aws.SSORoleName,
 		"inferenceModels":              modelsJSON,
 	}
 
-	if len(cfg.Desktop.MCPServers) > 0 {
-		servers := make([]desktopMCPServer, 0, len(cfg.Desktop.MCPServers))
-		for _, s := range cfg.Desktop.MCPServers {
-			servers = append(servers, desktopMCPServer{Name: s.Name, Transport: "http", URL: s.URL, OAuth: oauthSettings(s.OAuth)})
+	if len(claude.DesktopMCPServers) > 0 {
+		servers := make([]desktopMCPServer, 0, len(claude.DesktopMCPServers))
+		for _, s := range claude.DesktopMCPServers {
+			servers = append(servers, desktopMCPServer{Name: s.Name, Transport: "http", URL: s.URL, OAuth: oauthSettings()})
 		}
 
 		serversJSON, err := compactJSON(servers)
@@ -158,35 +173,26 @@ func desktopSettings(cfg Config) (map[string]string, error) {
 
 // oauthSettings returns the oauth object of a managedMcpServers entry, always
 // with an explicit callback port so Desktop never falls back to 53280.
-func oauthSettings(o *OAuth) *desktopOAuth {
-	if o == nil {
-		return nil
-	}
-
-	port := o.CallbackPort
-	if port == 0 {
-		port = defaultCallbackPort
-	}
-
-	return &desktopOAuth{ClientID: o.ClientID, Scope: o.Scope, CallbackPort: port}
+func oauthSettings() *desktopOAuth {
+	return &desktopOAuth{ClientID: jarvisClientID, Scope: jarvisScope, CallbackPort: jarvisCallbackPort}
 }
 
 // claudeCodeSettings returns Claude Code's managed settings. Claude Code
 // reaches Bedrock through ProfileName, and every allowed model alias resolves
 // to one of the configured AIPs. An unconfigured tier's alias isn't allowed.
-func claudeCodeSettings(cfg Config) map[string]any {
-	defaultModel, _ := cfg.model(cfg.defaultTier())
+func claudeCodeSettings(aws AWS, claude Claude) map[string]any {
+	defaultModel, _ := claude.model(claude.defaultTier())
 	env := map[string]string{
 		"CLAUDE_CODE_USE_BEDROCK": "1",
 		"AWS_PROFILE":             ProfileName,
-		"AWS_REGION":              cfg.AWS.BedrockRegion,
+		"AWS_REGION":              aws.BedrockRegion,
 		"ANTHROPIC_MODEL":         defaultModel.AIPARN,
 	}
 	overrides := map[string]string{}
 	available := []string{}
 
 	for _, tier := range tiers {
-		m, ok := cfg.model(tier)
+		m, ok := claude.model(tier)
 		if !ok {
 			continue
 		}
@@ -206,13 +212,15 @@ func claudeCodeSettings(cfg Config) map[string]any {
 	}
 }
 
-func renderMobileconfig(p Profile, desktop map[string]string, claudeCode map[string]any) ([]byte, error) {
-	desktopPayload := payload(p.Identifier+".desktop", "com.anthropic.claudefordesktop", "Claude Desktop")
+func renderMobileconfig(p MacOSProfile, desktop map[string]string, claudeCode map[string]any) ([]byte, error) {
+	identifier := p.IdentifierPrefix + ".claude"
+
+	desktopPayload := payload(identifier+".desktop", "com.anthropic.claudefordesktop", "Claude Desktop")
 	for k, v := range desktop {
 		desktopPayload[k] = v
 	}
 
-	claudeCodePayload := payload(p.Identifier+".claudecode", "com.anthropic.claudecode", "Claude Code")
+	claudeCodePayload := payload(identifier+".claudecode", "com.anthropic.claudecode", "Claude Code")
 	for k, v := range claudeCode {
 		claudeCodePayload[k] = v
 	}
@@ -221,12 +229,12 @@ func renderMobileconfig(p Profile, desktop map[string]string, claudeCode map[str
 		"PayloadContent": []any{desktopPayload, claudeCodePayload},
 		"PayloadDescription": "Points Claude Desktop and Claude Code at Amazon Bedrock, " +
 			"signed in through AWS IAM Identity Center.",
-		"PayloadDisplayName":  p.DisplayName,
-		"PayloadIdentifier":   p.Identifier,
+		"PayloadDisplayName":  claudeProfileDisplayName,
+		"PayloadIdentifier":   identifier,
 		"PayloadOrganization": p.Organization,
 		"PayloadScope":        "User",
 		"PayloadType":         "Configuration",
-		"PayloadUUID":         stableUUID(p.Identifier),
+		"PayloadUUID":         stableUUID(identifier),
 		"PayloadVersion":      1,
 	}
 
@@ -298,7 +306,7 @@ func regValue(name, value string) string {
 }
 
 func renderAWSConfig(a AWS) []byte {
-	return []byte(fmt.Sprintf(`# Claude on Amazon Bedrock. Add to ~/.aws/config (Windows: %%USERPROFILE%%\.aws\config).
+	return []byte(fmt.Sprintf(`# Claude Code and Codex on Amazon Bedrock (CCWB profile). Add to ~/.aws/config (Windows: %%USERPROFILE%%\.aws\config).
 
 [sso-session %s]
 sso_start_url = %s
@@ -344,15 +352,15 @@ model_reasoning_effort = %q
 `, ProfileName, a.BedrockRegion, ProfileName, c.DefaultModel, c.ReasoningEffort))
 }
 
-func renderCodexMobileconfig(p Profile, requirements []byte) ([]byte, error) {
-	identifier := p.Identifier + ".codex"
+func renderCodexMobileconfig(p MacOSProfile, requirements []byte) ([]byte, error) {
+	identifier := p.IdentifierPrefix + ".codex"
 	codexPayload := payload(identifier+".managed", "com.openai.codex", "Codex")
 	codexPayload["requirements_toml_base64"] = base64.StdEncoding.EncodeToString(requirements)
 
 	profile := map[string]any{
 		"PayloadContent":      []any{codexPayload},
 		"PayloadDescription":  "Configures Codex to use Amazon Bedrock Runtime through the CCWB AWS profile.",
-		"PayloadDisplayName":  "Codex on Amazon Bedrock (CCWB)",
+		"PayloadDisplayName":  codexProfileDisplayName,
 		"PayloadIdentifier":   identifier,
 		"PayloadOrganization": p.Organization,
 		"PayloadScope":        "User",

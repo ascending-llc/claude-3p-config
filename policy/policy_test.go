@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"flag"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,6 +15,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"testing/iotest"
 	"unicode/utf16"
 )
 
@@ -22,7 +24,7 @@ const validConfig = "testdata/valid.json"
 var update = flag.Bool("update", false, "rewrite testdata/golden from the current output")
 
 func TestRenderMatchesGolden(t *testing.T) {
-	cfg, err := Load(validConfig, Options{})
+	cfg, err := Load(validConfig, Options{Products: []Product{ProductClaude, ProductCodex}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,15 +66,26 @@ func TestMobileconfigIsValidProfile(t *testing.T) {
 		t.Skip("plutil is only available on macOS")
 	}
 
-	artifacts := mustRender(t, validConfig)
-	path := filepath.Join(t.TempDir(), "profile.mobileconfig")
-
-	if err := os.WriteFile(path, artifacts.Mobileconfig, 0o600); err != nil {
+	cfg, err := Load(validConfig, Options{Products: []Product{ProductClaude, ProductCodex}})
+	if err != nil {
 		t.Fatal(err)
 	}
 
-	if out, err := exec.Command("plutil", "-lint", path).CombinedOutput(); err != nil {
-		t.Fatalf("plutil -lint: %s: %s", err.Error(), out)
+	cfg.MacOSProfile.IdentifierPrefix = "com.example.custom"
+
+	artifacts, err := Render(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	path := filepath.Join(t.TempDir(), "profile.mobileconfig")
+
+	if writeErr := os.WriteFile(path, artifacts.Mobileconfig, 0o600); writeErr != nil {
+		t.Fatal(writeErr)
+	}
+
+	if out, lintErr := exec.Command("plutil", "-lint", path).CombinedOutput(); lintErr != nil {
+		t.Fatalf("plutil -lint: %s: %s", lintErr.Error(), out)
 	}
 
 	out, err := exec.Command("plutil", "-convert", "json", "-o", "-", path).Output()
@@ -81,7 +94,10 @@ func TestMobileconfigIsValidProfile(t *testing.T) {
 	}
 
 	var profile struct {
-		PayloadContent []map[string]any `json:"PayloadContent"`
+		PayloadUUID        string           `json:"PayloadUUID"`
+		PayloadIdentifier  string           `json:"PayloadIdentifier"`
+		PayloadDisplayName string           `json:"PayloadDisplayName"`
+		PayloadContent     []map[string]any `json:"PayloadContent"`
 	}
 
 	if err := json.Unmarshal(out, &profile); err != nil {
@@ -92,7 +108,23 @@ func TestMobileconfigIsValidProfile(t *testing.T) {
 		t.Fatalf("got %d payloads, want 2", len(profile.PayloadContent))
 	}
 
+	if profile.PayloadIdentifier != "com.example.custom.claude" || profile.PayloadDisplayName != "Claude on Amazon Bedrock (CCWB)" {
+		t.Errorf("profile identity = %q / %q", profile.PayloadIdentifier, profile.PayloadDisplayName)
+	}
+
+	if profile.PayloadUUID != stableUUID("com.example.custom.claude") {
+		t.Errorf("profile UUID = %q, want the UUID derived from the custom prefix", profile.PayloadUUID)
+	}
+
 	desktop, claudeCode := profile.PayloadContent[0], profile.PayloadContent[1]
+	if desktop["PayloadIdentifier"] != "com.example.custom.claude.desktop" || claudeCode["PayloadIdentifier"] != "com.example.custom.claude.claudecode" {
+		t.Errorf("payload identifiers = %v / %v", desktop["PayloadIdentifier"], claudeCode["PayloadIdentifier"])
+	}
+
+	if desktop["PayloadUUID"] != stableUUID("com.example.custom.claude.desktop") || claudeCode["PayloadUUID"] != stableUUID("com.example.custom.claude.claudecode") {
+		t.Errorf("payload UUIDs = %v / %v, want UUIDs derived from the custom prefix", desktop["PayloadUUID"], claudeCode["PayloadUUID"])
+	}
+
 	if desktop["PayloadType"] != "com.anthropic.claudefordesktop" || claudeCode["PayloadType"] != "com.anthropic.claudecode" {
 		t.Fatalf("unexpected payload types %v and %v", desktop["PayloadType"], claudeCode["PayloadType"])
 	}
@@ -122,15 +154,26 @@ func TestCodexMobileconfigIsValidProfile(t *testing.T) {
 		t.Skip("plutil is only available on macOS")
 	}
 
-	artifacts := mustRender(t, validConfig)
-	path := filepath.Join(t.TempDir(), "codex.mobileconfig")
-
-	if err := os.WriteFile(path, artifacts.CodexMobileconfig, 0o600); err != nil {
+	cfg, err := Load(validConfig, Options{Products: []Product{ProductClaude, ProductCodex}})
+	if err != nil {
 		t.Fatal(err)
 	}
 
-	if out, err := exec.Command("plutil", "-lint", path).CombinedOutput(); err != nil {
-		t.Fatalf("plutil -lint: %s: %s", err.Error(), out)
+	cfg.MacOSProfile.IdentifierPrefix = "com.example.custom"
+
+	artifacts, err := Render(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	path := filepath.Join(t.TempDir(), "codex.mobileconfig")
+
+	if writeErr := os.WriteFile(path, artifacts.CodexMobileconfig, 0o600); writeErr != nil {
+		t.Fatal(writeErr)
+	}
+
+	if out, lintErr := exec.Command("plutil", "-lint", path).CombinedOutput(); lintErr != nil {
+		t.Fatalf("plutil -lint: %s: %s", lintErr.Error(), out)
 	}
 
 	out, err := exec.Command("plutil", "-convert", "json", "-o", "-", path).Output()
@@ -139,8 +182,11 @@ func TestCodexMobileconfigIsValidProfile(t *testing.T) {
 	}
 
 	var profile struct {
-		PayloadScope   string           `json:"PayloadScope"`
-		PayloadContent []map[string]any `json:"PayloadContent"`
+		PayloadUUID        string           `json:"PayloadUUID"`
+		PayloadIdentifier  string           `json:"PayloadIdentifier"`
+		PayloadDisplayName string           `json:"PayloadDisplayName"`
+		PayloadScope       string           `json:"PayloadScope"`
+		PayloadContent     []map[string]any `json:"PayloadContent"`
 	}
 
 	if err := json.Unmarshal(out, &profile); err != nil {
@@ -149,6 +195,18 @@ func TestCodexMobileconfigIsValidProfile(t *testing.T) {
 
 	if len(profile.PayloadContent) != 1 || profile.PayloadContent[0]["PayloadType"] != "com.openai.codex" {
 		t.Fatalf("PayloadContent = %v, want one com.openai.codex payload", profile.PayloadContent)
+	}
+
+	if profile.PayloadIdentifier != "com.example.custom.codex" || profile.PayloadDisplayName != "Codex on Amazon Bedrock (CCWB)" {
+		t.Errorf("profile identity = %q / %q", profile.PayloadIdentifier, profile.PayloadDisplayName)
+	}
+
+	if profile.PayloadContent[0]["PayloadIdentifier"] != "com.example.custom.codex.managed" {
+		t.Errorf("payload identifier = %v", profile.PayloadContent[0]["PayloadIdentifier"])
+	}
+
+	if profile.PayloadUUID != stableUUID("com.example.custom.codex") || profile.PayloadContent[0]["PayloadUUID"] != stableUUID("com.example.custom.codex.managed") {
+		t.Errorf("profile and payload UUIDs = %q / %v, want UUIDs derived from the custom prefix", profile.PayloadUUID, profile.PayloadContent[0]["PayloadUUID"])
 	}
 
 	if profile.PayloadScope != "User" {
@@ -174,33 +232,95 @@ func TestCodexMobileconfigIsValidProfile(t *testing.T) {
 	}
 }
 
-func TestRenderOmitsCodexUnlessEnabled(t *testing.T) {
-	disabled := false
-
+func TestProductSelection(t *testing.T) {
 	tests := []struct {
-		codex *Codex
-		name  string
+		mutate     func(*Config)
+		name       string
+		products   []Product
+		wantErr    []string
+		wantClaude bool
+		wantCodex  bool
 	}{
-		{name: "no codex section"},
-		{name: "codex disabled", codex: &Codex{Enabled: &disabled}},
+		{name: "both products", products: []Product{ProductClaude, ProductCodex}, wantClaude: true, wantCodex: true},
+		{name: "duplicate products", products: []Product{ProductCodex, ProductClaude, ProductCodex}, wantClaude: true, wantCodex: true},
+		{name: "claude only", products: []Product{ProductClaude}, wantClaude: true},
+		{name: "codex only", products: []Product{ProductCodex}, wantCodex: true},
+		{name: "codex without claude section", products: []Product{ProductCodex}, mutate: func(c *Config) { c.Claude = nil }, wantCodex: true},
+		{name: "claude without codex section", products: []Product{ProductClaude}, mutate: func(c *Config) { c.Codex = nil }, wantClaude: true},
+		{name: "unselected invalid codex", products: []Product{ProductClaude}, mutate: func(c *Config) { c.Codex.ReasoningEffort = "hihg" }, wantClaude: true},
+		{name: "unselected invalid claude", products: []Product{ProductCodex}, mutate: func(c *Config) { c.Claude.Models = nil }, wantCodex: true},
+		{name: "missing selected claude", products: []Product{ProductClaude}, mutate: func(c *Config) { c.Claude = nil }, wantErr: []string{"claude: is required when claude is selected"}},
+		{name: "missing selected codex", products: []Product{ProductCodex}, mutate: func(c *Config) { c.Codex = nil }, wantErr: []string{"codex: is required when codex is selected"}},
+		{name: "no products", wantErr: []string{"products: must select at least one of claude or codex"}},
+		{name: "unknown product", products: []Product{"gemini"}, wantErr: []string{`products: unknown product "gemini"`}},
+		{name: "shared AWS is validated for claude", products: []Product{ProductClaude}, mutate: func(c *Config) { c.AWS.AccountID = "" }, wantErr: []string{"aws.account_id:"}},
+		{name: "shared profile is validated for codex", products: []Product{ProductCodex}, mutate: func(c *Config) { c.MacOSProfile.IdentifierPrefix = "" }, wantErr: []string{"macos_profile.identifier_prefix:"}},
+		{
+			name:     "missing sections join shared errors",
+			products: []Product{ProductClaude, ProductCodex},
+			mutate: func(c *Config) {
+				c.AWS.AccountID = ""
+				c.Claude = nil
+				c.Codex = nil
+			},
+			wantErr: []string{"aws.account_id:", "claude: is required when claude is selected", "codex: is required when codex is selected"},
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg, err := Load(validConfig, Options{})
+			cfg, err := Load(validConfig, Options{Products: []Product{ProductClaude, ProductCodex}})
 			if err != nil {
 				t.Fatal(err)
 			}
 
-			cfg.Codex = tt.codex
+			if tt.mutate != nil {
+				tt.mutate(&cfg)
+			}
+
+			data, err := json.Marshal(cfg)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			cfg, err = Parse(bytes.NewReader(data), Options{Products: tt.products})
+			if len(tt.wantErr) > 0 {
+				if err == nil {
+					t.Fatal("Parse succeeded, want an error")
+				}
+
+				for _, want := range tt.wantErr {
+					if !strings.Contains(err.Error(), want) {
+						t.Errorf("error %q does not contain %q", err.Error(), want)
+					}
+				}
+
+				return
+			}
+
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if (cfg.Claude != nil) != tt.wantClaude || (cfg.Codex != nil) != tt.wantCodex {
+				t.Fatalf("parsed sections: Claude = %v, Codex = %v", cfg.Claude, cfg.Codex)
+			}
 
 			artifacts, err := Render(cfg)
 			if err != nil {
 				t.Fatal(err)
 			}
 
-			if artifacts.CodexMobileconfig != nil || artifacts.CodexRequirements != nil {
-				t.Error("rendered Codex artifacts although Codex is not enabled")
+			if (len(artifacts.Mobileconfig) > 0) != tt.wantClaude || (len(artifacts.Reg) > 0) != tt.wantClaude {
+				t.Errorf("Claude artifacts do not match selection %v", tt.products)
+			}
+
+			if (len(artifacts.CodexMobileconfig) > 0) != tt.wantCodex || (len(artifacts.CodexRequirements) > 0) != tt.wantCodex {
+				t.Errorf("Codex artifacts do not match selection %v", tt.products)
+			}
+
+			if len(artifacts.AWSConfig) == 0 {
+				t.Error("shared AWS config is missing")
 			}
 		})
 	}
@@ -253,9 +373,15 @@ func TestRegFile(t *testing.T) {
 		t.Fatalf("managedMcpServers: %s", err.Error())
 	}
 
-	wantOAuth := desktopOAuth{ClientID: "claude-desktop-ccwb", Scope: "mcp-proxy-ops", CallbackPort: defaultCallbackPort}
-	if len(servers) != 2 || servers[0].OAuth == nil || *servers[0].OAuth != wantOAuth || servers[1].OAuth != nil {
-		t.Errorf("managedMcpServers = %+v, want OAuth %+v on the first server only", servers, wantOAuth)
+	if len(servers) != 2 {
+		t.Fatalf("got %d MCP servers, want 2", len(servers))
+	}
+
+	wantOAuth := desktopOAuth{ClientID: "jarvis-registry-claude-desktop", Scope: "mcp-proxy-ops", CallbackPort: 47280}
+	for _, server := range servers {
+		if server.OAuth == nil || *server.OAuth != wantOAuth {
+			t.Errorf("server %q OAuth = %+v, want %+v", server.Name, server.OAuth, wantOAuth)
+		}
 	}
 
 	var settings struct {
@@ -273,14 +399,14 @@ func TestRegFile(t *testing.T) {
 }
 
 func TestDesktopSettingsDefaults(t *testing.T) {
-	cfg, err := Load(validConfig, Options{})
+	cfg, err := Load(validConfig, Options{Products: []Product{ProductClaude, ProductCodex}})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	cfg.Desktop.MCPServers = nil
+	cfg.Claude.DesktopMCPServers = nil
 
-	settings, err := desktopSettings(cfg)
+	settings, err := desktopSettings(cfg.AWS, *cfg.Claude)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -295,48 +421,40 @@ func TestDesktopSettingsDefaults(t *testing.T) {
 	}
 
 	want := []desktopModel{
-		{Name: cfg.Models[0].AIPARN, LabelOverride: "Sonnet", AnthropicFamilyTier: TierSonnet},
-		{Name: cfg.Models[2].AIPARN, LabelOverride: "Opus", AnthropicFamilyTier: TierOpus},
-		{Name: cfg.Models[1].AIPARN, LabelOverride: "Haiku", AnthropicFamilyTier: TierHaiku},
+		{Name: cfg.Claude.Models[TierSonnet].AIPARN, LabelOverride: "Sonnet", AnthropicFamilyTier: TierSonnet},
+		{Name: cfg.Claude.Models[TierOpus].AIPARN, LabelOverride: "Opus", AnthropicFamilyTier: TierOpus},
+		{Name: cfg.Claude.Models[TierHaiku].AIPARN, LabelOverride: "Haiku", AnthropicFamilyTier: TierHaiku},
 	}
 	if !slices.Equal(models, want) {
 		t.Errorf("inferenceModels = %+v, want %+v", models, want)
 	}
 }
 
-func TestMCPOAuthCallbackPort(t *testing.T) {
-	tests := []struct {
-		name     string
-		port     int
-		wantPort int
-	}{
-		{name: "default", wantPort: defaultCallbackPort},
-		{name: "configured", port: 40000, wantPort: 40000},
+func TestMCPUsesJarvisOAuth(t *testing.T) {
+	cfg, err := Load(validConfig, Options{Products: []Product{ProductClaude, ProductCodex}})
+	if err != nil {
+		t.Fatal(err)
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cfg, err := Load(validConfig, Options{})
-			if err != nil {
-				t.Fatal(err)
-			}
+	settings, err := desktopSettings(cfg.AWS, *cfg.Claude)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-			cfg.Desktop.MCPServers[0].OAuth.CallbackPort = tt.port
+	var servers []desktopMCPServer
+	if err := json.Unmarshal([]byte(settings["managedMcpServers"]), &servers); err != nil {
+		t.Fatal(err)
+	}
 
-			settings, err := desktopSettings(cfg)
-			if err != nil {
-				t.Fatal(err)
-			}
+	if len(servers) != len(cfg.Claude.DesktopMCPServers) {
+		t.Fatalf("got %d MCP servers, want %d", len(servers), len(cfg.Claude.DesktopMCPServers))
+	}
 
-			var servers []desktopMCPServer
-			if err := json.Unmarshal([]byte(settings["managedMcpServers"]), &servers); err != nil {
-				t.Fatal(err)
-			}
-
-			if got := servers[0].OAuth.CallbackPort; got != tt.wantPort {
-				t.Errorf("callbackPort = %d, want %d", got, tt.wantPort)
-			}
-		})
+	wantOAuth := desktopOAuth{ClientID: "jarvis-registry-claude-desktop", Scope: "mcp-proxy-ops", CallbackPort: 47280}
+	for _, server := range servers {
+		if server.OAuth == nil || *server.OAuth != wantOAuth {
+			t.Errorf("server %q OAuth = %+v, want %+v", server.Name, server.OAuth, wantOAuth)
+		}
 	}
 }
 
@@ -381,17 +499,17 @@ func TestDefaultTierAndOptionalOpus(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg, err := Load(validConfig, Options{})
+			cfg, err := Load(validConfig, Options{Products: []Product{ProductClaude, ProductCodex}})
 			if err != nil {
 				t.Fatal(err)
 			}
 
-			cfg.DefaultTier = tt.defaultTier
+			cfg.Claude.DefaultTier = tt.defaultTier
 			if tt.withoutOpus {
-				cfg.Models = cfg.Models[:2]
+				delete(cfg.Claude.Models, TierOpus)
 			}
 
-			desktop, err := desktopSettings(cfg)
+			desktop, err := desktopSettings(cfg.AWS, *cfg.Claude)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -410,9 +528,9 @@ func TestDefaultTierAndOptionalOpus(t *testing.T) {
 				t.Errorf("Desktop tiers = %v, want %v", gotTiers, tt.wantDesktop)
 			}
 
-			settings := claudeCodeSettings(cfg)
+			settings := claudeCodeSettings(cfg.AWS, *cfg.Claude)
 			env, _ := settings["env"].(map[string]string)
-			wantModel, _ := cfg.model(tt.wantDefault)
+			wantModel, _ := cfg.Claude.model(tt.wantDefault)
 
 			if env["ANTHROPIC_MODEL"] != wantModel.AIPARN {
 				t.Errorf("ANTHROPIC_MODEL = %q, want the %s AIP", env["ANTHROPIC_MODEL"], tt.wantDefault)
@@ -443,59 +561,65 @@ func TestParseRejectsInvalidConfig(t *testing.T) {
 		{name: "bad region", mutate: func(c *Config) { c.AWS.SSORegion = "useast1" }, wantErr: []string{"aws.sso_region: must be an AWS region name"}},
 		{name: "http start URL", mutate: func(c *Config) { c.AWS.SSOStartURL = "http://example.awsapps.com/start" }, wantErr: []string{"aws.sso_start_url: must be an https URL"}},
 		{name: "role name with space", mutate: func(c *Config) { c.AWS.SSORoleName = "Claude User" }, wantErr: []string{"aws.sso_role_name: must be a permission set name"}},
-		{name: "no haiku model", mutate: func(c *Config) { c.Models = c.Models[:1] }, wantErr: []string{"models: must include a haiku model"}},
-		{name: "duplicate tier", mutate: func(c *Config) { c.Models[1].Tier = TierSonnet }, wantErr: []string{`models[1].tier: "sonnet" is listed more than once`, "models: must include a haiku model"}},
-		{name: "unknown tier", mutate: func(c *Config) { c.Models[0].Tier = "fable" }, wantErr: []string{`models[0].tier: must be "opus", "sonnet" or "haiku"`}},
+		{name: "no haiku model", mutate: func(c *Config) { delete(c.Claude.Models, TierHaiku) }, wantErr: []string{"claude.models: must include a haiku model"}},
+		{name: "no sonnet model", mutate: func(c *Config) { delete(c.Claude.Models, TierSonnet) }, wantErr: []string{"claude.models: must include a sonnet model"}},
+		{
+			name:    "unknown tier",
+			mutate:  func(c *Config) { c.Claude.Models["fable"] = c.Claude.Models[TierSonnet] },
+			wantErr: []string{`claude.models.fable: must be "opus", "sonnet" or "haiku"`},
+		},
 		{
 			name: "default tier without its model",
 			mutate: func(c *Config) {
-				c.Models = c.Models[:2]
-				c.DefaultTier = TierOpus
+				delete(c.Claude.Models, TierOpus)
+				c.Claude.DefaultTier = TierOpus
 			},
-			wantErr: []string{`default_tier: must be the tier of a configured model, got "opus"`},
+			wantErr: []string{`claude.default_tier: must be the tier of a configured model, got "opus"`},
 		},
-		{name: "unknown default tier", mutate: func(c *Config) { c.DefaultTier = "Sonnet" }, wantErr: []string{`default_tier: must be the tier of a configured model, got "Sonnet"`}},
+		{name: "unknown default tier", mutate: func(c *Config) { c.Claude.DefaultTier = "Sonnet" }, wantErr: []string{`claude.default_tier: must be the tier of a configured model, got "Sonnet"`}},
 		{
-			name:    "system inference profile instead of an AIP",
-			mutate:  func(c *Config) { c.Models[0].AIPARN = "us.anthropic.claude-sonnet-5" },
-			wantErr: []string{"models[0].aip_arn: must be an application inference profile ARN"},
+			name: "system inference profile instead of an AIP",
+			mutate: func(c *Config) {
+				model := c.Claude.Models[TierSonnet]
+				model.AIPARN = "us.anthropic.claude-sonnet-5"
+				c.Claude.Models[TierSonnet] = model
+			},
+			wantErr: []string{"claude.models.sonnet.aip_arn: must be an application inference profile ARN"},
 		},
 		{
 			name: "AIP in another region",
 			mutate: func(c *Config) {
-				c.Models[0].AIPARN = "arn:aws:bedrock:us-west-2:123456789012:application-inference-profile/abc"
+				model := c.Claude.Models[TierSonnet]
+				model.AIPARN = "arn:aws:bedrock:us-west-2:123456789012:application-inference-profile/abc"
+				c.Claude.Models[TierSonnet] = model
 			},
-			wantErr: []string{"models[0].aip_arn: is in us-west-2, but aws.bedrock_region is us-east-1"},
+			wantErr: []string{"claude.models.sonnet.aip_arn: is in us-west-2, but aws.bedrock_region is us-east-1"},
 		},
 		{
 			name: "AIP in another account",
 			mutate: func(c *Config) {
-				c.Models[1].AIPARN = "arn:aws:bedrock:us-east-1:210987654321:application-inference-profile/abc"
+				model := c.Claude.Models[TierHaiku]
+				model.AIPARN = "arn:aws:bedrock:us-east-1:210987654321:application-inference-profile/abc"
+				c.Claude.Models[TierHaiku] = model
 			},
-			wantErr: []string{"models[1].aip_arn: is in account 210987654321, but aws.account_id is 123456789012"},
+			wantErr: []string{"claude.models.haiku.aip_arn: is in account 210987654321, but aws.account_id is 123456789012"},
 		},
 		{
-			name:    "model ID of another tier",
-			mutate:  func(c *Config) { c.Models[0].AnthropicModelID = "claude-haiku-4-5" },
-			wantErr: []string{"models[0].anthropic_model_id: must be an Anthropic model ID of the sonnet tier"},
+			name: "model ID of another tier",
+			mutate: func(c *Config) {
+				model := c.Claude.Models[TierSonnet]
+				model.AnthropicModelID = "claude-haiku-4-5"
+				c.Claude.Models[TierSonnet] = model
+			},
+			wantErr: []string{"claude.models.sonnet.anthropic_model_id: must be an Anthropic model ID of the sonnet tier"},
 		},
-		{name: "http MCP URL", mutate: func(c *Config) { c.Desktop.MCPServers[0].URL = "http://mcp.example.com" }, wantErr: []string{"desktop.mcp_servers[0].url: must be an https URL"}},
-		{name: "bad MCP name", mutate: func(c *Config) { c.Desktop.MCPServers[0].Name = "-registry" }, wantErr: []string{"desktop.mcp_servers[0].name: must be letters"}},
+		{name: "http MCP URL", mutate: func(c *Config) { c.Claude.DesktopMCPServers[0].URL = "http://mcp.example.com" }, wantErr: []string{"claude.desktop_mcp_servers[0].url: must be an https URL"}},
+		{name: "bad MCP name", mutate: func(c *Config) { c.Claude.DesktopMCPServers[0].Name = "-registry" }, wantErr: []string{"claude.desktop_mcp_servers[0].name: must be letters"}},
 		{
 			name:    "duplicate MCP name",
-			mutate:  func(c *Config) { c.Desktop.MCPServers[1].Name = "example-registry" },
-			wantErr: []string{`desktop.mcp_servers[1].name: "example-registry" is listed more than once`},
+			mutate:  func(c *Config) { c.Claude.DesktopMCPServers[1].Name = "example-registry" },
+			wantErr: []string{`claude.desktop_mcp_servers[1].name: "example-registry" is listed more than once`},
 		},
-		{name: "OAuth without client ID", mutate: func(c *Config) { c.Desktop.MCPServers[0].OAuth.ClientID = "" }, wantErr: []string{"desktop.mcp_servers[0].oauth.client_id: must be a client ID without spaces"}},
-		{name: "OAuth client ID with space", mutate: func(c *Config) { c.Desktop.MCPServers[0].OAuth.ClientID = "claude desktop" }, wantErr: []string{"desktop.mcp_servers[0].oauth.client_id: must be a client ID without spaces"}},
-		{
-			name:    "callback port in the Windows dynamic range",
-			mutate:  func(c *Config) { c.Desktop.MCPServers[0].OAuth.CallbackPort = 53280 },
-			wantErr: []string{"desktop.mcp_servers[0].oauth.callback_port: must be between 1024 and 49151, below the dynamic port range Windows reserves ports from, got 53280"},
-		},
-		{name: "privileged callback port", mutate: func(c *Config) { c.Desktop.MCPServers[0].OAuth.CallbackPort = 80 }, wantErr: []string{"desktop.mcp_servers[0].oauth.callback_port: must be between 1024 and 49151"}},
-		{name: "malformed scope", mutate: func(c *Config) { c.Desktop.MCPServers[0].OAuth.Scope = "mcp-proxy-ops  servers-read" }, wantErr: []string{"desktop.mcp_servers[0].oauth.scope: must be space-separated OAuth scopes"}},
-		{name: "codex without enabled", mutate: func(c *Config) { c.Codex.Enabled = nil }, wantErr: []string{"codex.enabled: is required"}},
 		{
 			name:    "codex model that is not an OpenAI inference profile",
 			mutate:  func(c *Config) { c.Codex.DefaultModel = "openai.gpt-6.1-sol" },
@@ -507,8 +631,8 @@ func TestParseRejectsInvalidConfig(t *testing.T) {
 			wantErr: []string{"codex.default_model: must be a global. or us. Bedrock Runtime inference profile ID of an OpenAI model"},
 		},
 		{name: "unknown codex reasoning effort", mutate: func(c *Config) { c.Codex.ReasoningEffort = "hihg" }, wantErr: []string{`codex.reasoning_effort: must be one of none, minimal, low, medium, high, xhigh, max, ultra, persistent, got "hihg"`}},
-		{name: "bad identifier", mutate: func(c *Config) { c.Profile.Identifier = "claude" }, wantErr: []string{"profile.identifier: must be a reverse-DNS identifier"}},
-		{name: "empty organization", mutate: func(c *Config) { c.Profile.Organization = " " }, wantErr: []string{"profile.organization: must not be empty"}},
+		{name: "bad identifier", mutate: func(c *Config) { c.MacOSProfile.IdentifierPrefix = "claude" }, wantErr: []string{"macos_profile.identifier_prefix: must be a reverse-DNS identifier"}},
+		{name: "empty organization", mutate: func(c *Config) { c.MacOSProfile.Organization = " " }, wantErr: []string{"macos_profile.organization: must not be empty"}},
 		{
 			name:    "placeholder left in",
 			mutate:  func(c *Config) { c.AWS.SSORoleName = "REPLACE_WITH_PERMISSION_SET_NAME" },
@@ -518,15 +642,15 @@ func TestParseRejectsInvalidConfig(t *testing.T) {
 			name: "every failure is reported",
 			mutate: func(c *Config) {
 				c.AWS.AccountID = "1"
-				c.Profile.DisplayName = ""
+				c.MacOSProfile.Organization = ""
 			},
-			wantErr: []string{"aws.account_id:", "profile.display_name: must not be empty"},
+			wantErr: []string{"aws.account_id:", "macos_profile.organization: must not be empty"},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg, err := Load(validConfig, Options{})
+			cfg, err := Load(validConfig, Options{Products: []Product{ProductClaude, ProductCodex}})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -538,7 +662,7 @@ func TestParseRejectsInvalidConfig(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			_, err = Parse(bytes.NewReader(mutated), Options{})
+			_, err = Parse(bytes.NewReader(mutated), Options{Products: []Product{ProductClaude, ProductCodex}})
 			if err == nil {
 				t.Fatal("Parse succeeded, want an error")
 			}
@@ -552,10 +676,46 @@ func TestParseRejectsInvalidConfig(t *testing.T) {
 	}
 }
 
+func TestModelValidationOrder(t *testing.T) {
+	cfg, err := Load(validConfig, Options{Products: []Product{ProductClaude, ProductCodex}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cfg.Claude.Models = map[string]Model{"zeta": {}, "alpha": {}}
+
+	data, err := json.Marshal(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = Parse(bytes.NewReader(data), Options{Products: []Product{ProductClaude}})
+	if err == nil {
+		t.Fatal("Parse succeeded, want invalid model errors")
+	}
+
+	messages := strings.Split(err.Error(), "\n")
+
+	wantPaths := []string{
+		`claude.models.alpha: must be "opus", "sonnet" or "haiku"`,
+		`claude.models.zeta: must be "opus", "sonnet" or "haiku"`,
+		"claude.models: must include a sonnet model", "claude.models: must include a haiku model",
+	}
+	if len(messages) != len(wantPaths)+1 {
+		t.Fatalf("got errors %q, want %d model errors", err.Error(), len(wantPaths))
+	}
+
+	for i, path := range wantPaths {
+		if !strings.HasPrefix(messages[i+1], path) {
+			t.Errorf("error %d = %q, want prefix %q", i, messages[i+1], path)
+		}
+	}
+}
+
 func TestParseAcceptsCodexModels(t *testing.T) {
 	for _, model := range []string{"global.openai.gpt-6-astra", "us.openai.gpt-6-luna", "global.openai.gpt-6.1-terra", "us.openai.gpt-6.1-sol"} {
 		t.Run(model, func(t *testing.T) {
-			cfg, err := Load(validConfig, Options{})
+			cfg, err := Load(validConfig, Options{Products: []Product{ProductClaude, ProductCodex}})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -567,7 +727,7 @@ func TestParseAcceptsCodexModels(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if _, err := Parse(bytes.NewReader(mutated), Options{}); err != nil {
+			if _, err := Parse(bytes.NewReader(mutated), Options{Products: []Product{ProductClaude, ProductCodex}}); err != nil {
 				t.Errorf("Parse: %s", err.Error())
 			}
 		})
@@ -582,19 +742,18 @@ func TestParseRejectsMalformedJSON(t *testing.T) {
 
 	valid := string(raw)
 	tests := []struct {
-		name    string
-		input   string
-		wantErr string
+		name     string
+		input    string
+		wantErr  string
+		products []Product
 	}{
-		{name: "unknown field", input: strings.Replace(valid, `"organization": "Example"`, `"organization": "Example", "extra": true`, 1), wantErr: `unknown field "extra"`},
-		{name: "unknown MCP field", input: strings.Replace(valid, `"name": "static-tools"`, `"name": "static-tools", "transport": "sse"`, 1), wantErr: `unknown field "transport"`},
-		{name: "unknown OAuth field", input: strings.Replace(valid, `"scope": "mcp-proxy-ops"`, `"scope": "mcp-proxy-ops", "client_secret": "x"`, 1), wantErr: `unknown field "client_secret"`},
-		{
-			name:    "OAuth as a boolean, the former automatic registration",
-			input:   regexp.MustCompile(`"oauth": \{[^}]*\}`).ReplaceAllString(valid, `"oauth": true`),
-			wantErr: "oauth of type policy.OAuth",
-		},
-		{name: "trailing data", input: valid + `{}`, wantErr: "unexpected data after the JSON object"},
+		{name: "unknown field", input: strings.Replace(valid, `"organization": "Example"`, `"organization": "Example", "extra": true`, 1), wantErr: `unknown field "extra"`, products: []Product{ProductClaude, ProductCodex}},
+		{name: "unknown MCP field", input: strings.Replace(valid, `"name": "static-tools"`, `"name": "static-tools", "transport": "sse"`, 1), wantErr: `unknown field "transport"`, products: []Product{ProductClaude, ProductCodex}},
+		{name: "removed OAuth field", input: strings.Replace(valid, `"name": "static-tools"`, `"name": "static-tools", "oauth": {}`, 1), wantErr: `unknown field "oauth"`, products: []Product{ProductClaude}},
+		{name: "removed enabled field", input: strings.Replace(valid, `"codex": {`, `"codex": {"enabled": true,`, 1), wantErr: `unknown field "enabled"`, products: []Product{ProductCodex}},
+		{name: "unknown unselected codex field", input: strings.Replace(valid, `"reasoning_effort"`, `"reasoning_efort"`, 1), wantErr: `unknown field "reasoning_efort"`, products: []Product{ProductClaude}},
+		{name: "unknown unselected claude field", input: strings.Replace(valid, `"anthropic_model_id"`, `"anthropic_model"`, 1), wantErr: `unknown field "anthropic_model"`, products: []Product{ProductCodex}},
+		{name: "wrong type in unselected codex", input: strings.Replace(valid, `"reasoning_effort": "high"`, `"reasoning_effort": 1`, 1), wantErr: "cannot unmarshal number", products: []Product{ProductClaude}},
 	}
 
 	for _, tt := range tests {
@@ -603,9 +762,50 @@ func TestParseRejectsMalformedJSON(t *testing.T) {
 				t.Fatal("test input was not modified; the fixture changed")
 			}
 
-			_, err := Parse(strings.NewReader(tt.input), Options{})
+			_, err := Parse(strings.NewReader(tt.input), Options{Products: tt.products})
 			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 				t.Fatalf("got %v, want an error containing %q", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestParseRequiresEndOfInput(t *testing.T) {
+	raw, err := os.ReadFile(validConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	valid := string(raw)
+
+	tests := []struct {
+		reader  io.Reader
+		name    string
+		wantErr bool
+	}{
+		{name: "end of input", reader: strings.NewReader(valid)},
+		{name: "trailing whitespace", reader: strings.NewReader(valid + " \t\r\n")},
+		{name: "extra closing brace", reader: strings.NewReader(valid + "}"), wantErr: true},
+		{name: "extra closing bracket", reader: strings.NewReader(valid + "]"), wantErr: true},
+		{name: "second object", reader: strings.NewReader(valid + "{}"), wantErr: true},
+		{name: "trailing null", reader: strings.NewReader(valid + "null"), wantErr: true},
+		{name: "trailing garbage", reader: strings.NewReader(valid + "garbage"), wantErr: true},
+		{name: "read failure", reader: io.MultiReader(strings.NewReader(valid), iotest.ErrReader(io.ErrUnexpectedEOF)), wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := Parse(tt.reader, Options{Products: []Product{ProductClaude, ProductCodex}})
+			if tt.wantErr {
+				if err == nil || !strings.Contains(err.Error(), "unexpected data after the JSON object") {
+					t.Fatalf("got %v, want a trailing-input error", err)
+				}
+
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("valid config rejected: %s", err.Error())
 			}
 		})
 	}
@@ -614,16 +814,16 @@ func TestParseRejectsMalformedJSON(t *testing.T) {
 func TestPlaceholders(t *testing.T) {
 	const example = "../config/config.example.json"
 
-	if _, err := Load(example, Options{AllowPlaceholders: true}); err != nil {
+	if _, err := Load(example, Options{Products: []Product{ProductClaude, ProductCodex}, AllowPlaceholders: true}); err != nil {
 		t.Fatalf("example config with placeholders allowed: %s", err.Error())
 	}
 
-	_, err := Load(example, Options{})
+	_, err := Load(example, Options{Products: []Product{ProductClaude, ProductCodex}})
 	if err == nil {
 		t.Fatal("example config loaded without AllowPlaceholders")
 	}
 
-	for _, field := range []string{"aws.account_id", "aws.sso_start_url", "aws.sso_role_name", "models[0].aip_arn", "models[1].aip_arn", "models[2].aip_arn", "desktop.mcp_servers[0].url", "desktop.mcp_servers[0].oauth.client_id"} {
+	for _, field := range []string{"aws.account_id", "aws.sso_start_url", "aws.sso_role_name", "macos_profile.organization", "claude.models.sonnet.aip_arn", "claude.models.haiku.aip_arn", "claude.models.opus.aip_arn", "claude.desktop_mcp_servers[0].url"} {
 		if !strings.Contains(err.Error(), field+": replace the placeholder") {
 			t.Errorf("error does not flag %s:\n%s", field, err.Error())
 		}
@@ -649,7 +849,7 @@ func TestStableUUID(t *testing.T) {
 func mustRender(t *testing.T, path string) Artifacts {
 	t.Helper()
 
-	cfg, err := Load(path, Options{})
+	cfg, err := Load(path, Options{Products: []Product{ProductClaude, ProductCodex}})
 	if err != nil {
 		t.Fatal(err)
 	}
