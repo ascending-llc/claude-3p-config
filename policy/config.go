@@ -290,6 +290,9 @@ func (v *validator) validateModels(models map[string]Model, a AWS) {
 
 		if !slices.Contains(tiers, tier) {
 			v.fail(path, fmt.Sprintf("must be %q, %q or %q", TierOpus, TierSonnet, TierHaiku))
+
+			// The field checks assume a known tier and would only add misleading errors.
+			continue
 		}
 
 		v.field(path+".aip_arn", m.AIPARN, aipARN(a))

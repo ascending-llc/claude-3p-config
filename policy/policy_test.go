@@ -697,8 +697,8 @@ func TestModelValidationOrder(t *testing.T) {
 	messages := strings.Split(err.Error(), "\n")
 
 	wantPaths := []string{
-		"claude.models.alpha:", "claude.models.alpha.aip_arn:", "claude.models.alpha.anthropic_model_id:",
-		"claude.models.zeta:", "claude.models.zeta.aip_arn:", "claude.models.zeta.anthropic_model_id:",
+		`claude.models.alpha: must be "opus", "sonnet" or "haiku"`,
+		`claude.models.zeta: must be "opus", "sonnet" or "haiku"`,
 		"claude.models: must include a sonnet model", "claude.models: must include a haiku model",
 	}
 	if len(messages) != len(wantPaths)+1 {
