@@ -8,11 +8,11 @@
 			<key>PayloadDisplayName</key>
 			<string>Claude Desktop</string>
 			<key>PayloadIdentifier</key>
-			<string>com.example.claude.ccwb.desktop</string>
+			<string>com.example.ccwb.claude.desktop</string>
 			<key>PayloadType</key>
 			<string>com.anthropic.claudefordesktop</string>
 			<key>PayloadUUID</key>
-			<string>18C37AF2-743E-878A-8509-3A17868E6FEA</string>
+			<string>30F22323-4B58-8CD7-858F-7FF6D95CA8CD</string>
 			<key>PayloadVersion</key>
 			<integer>1</integer>
 			<key>inferenceBedrockRegion</key>
@@ -32,17 +32,17 @@
 			<key>inferenceProvider</key>
 			<string>bedrock</string>
 			<key>managedMcpServers</key>
-			<string>[{"oauth":{"clientId":"REPLACE_WITH_OAUTH_CLIENT_ID","scope":"mcp-proxy-ops","callbackPort":47280},"name":"jarvis-registry","transport":"http","url":"REPLACE_WITH_MCP_SERVER_URL"}]</string>
+			<string>[{"oauth":{"clientId":"jarvis-registry-claude-desktop","scope":"mcp-proxy-ops","callbackPort":47280},"name":"jarvis-registry","transport":"http","url":"REPLACE_WITH_MCP_SERVER_URL"}]</string>
 		</dict>
 		<dict>
 			<key>PayloadDisplayName</key>
 			<string>Claude Code</string>
 			<key>PayloadIdentifier</key>
-			<string>com.example.claude.ccwb.claudecode</string>
+			<string>com.example.ccwb.claude.claudecode</string>
 			<key>PayloadType</key>
 			<string>com.anthropic.claudecode</string>
 			<key>PayloadUUID</key>
-			<string>EA121D09-2855-8EC9-BB57-B6291B3C15D9</string>
+			<string>E6735EE7-02D3-8AEB-8892-F2CFBBAFC902</string>
 			<key>PayloadVersion</key>
 			<integer>1</integer>
 			<key>availableModels</key>
@@ -88,7 +88,7 @@
 	<key>PayloadDisplayName</key>
 	<string>Claude on Amazon Bedrock (CCWB)</string>
 	<key>PayloadIdentifier</key>
-	<string>com.example.claude.ccwb</string>
+	<string>com.example.ccwb.claude</string>
 	<key>PayloadOrganization</key>
 	<string>REPLACE_WITH_ORGANIZATION_NAME</string>
 	<key>PayloadScope</key>
@@ -96,7 +96,7 @@
 	<key>PayloadType</key>
 	<string>Configuration</string>
 	<key>PayloadUUID</key>
-	<string>C8309682-ADBF-817A-BD09-C07CDE4E002F</string>
+	<string>9FF83491-EAA3-8965-8421-CBA836914116</string>
 	<key>PayloadVersion</key>
 	<integer>1</integer>
 </dict>

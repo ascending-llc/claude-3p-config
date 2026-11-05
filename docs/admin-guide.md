@@ -5,8 +5,9 @@ This guide is for whoever prepares the configuration: AWS setup, `config/config.
 ## 1. AWS prerequisites
 
 - **IAM Identity Center** in your organization, with the identity provider you use (such as Entra ID) connected.
-- **A permission set** assigned to the people who'll use Claude, in the account that holds the AIPs. Both Claude Desktop and Claude Code sign in with it.
-- **An application inference profile (AIP) per model tier** in that account and in your Bedrock region: one for a Sonnet model, one for a Haiku model and, optionally, one for an Opus model. All Claude traffic goes through them, so cost is tracked per AIP. Bedrock doesn't attribute cost per person; per-person activity shows up as the caller's role session (`…/<user email>`) in CloudTrail or Bedrock invocation logs.
+- **A permission set** assigned to the people who'll use the selected products, in the AWS account that runs their Bedrock requests. Claude Desktop, Claude Code and Codex use this account and permission set.
+- **For Claude, an application inference profile (AIP) per model tier** in that account and in your Bedrock region. Provision one for Sonnet, one for Haiku and, optionally, one for Opus. All Claude traffic goes through them, so cost is tracked per AIP. Per-person activity shows up as the caller's role session (`…/<user email>`) in CloudTrail or Bedrock invocation logs.
+- **For Codex, a Global or US Geo system inference profile** (`global.openai.…` or `us.openai.…`) permitted in IAM. The Bedrock Responses API used by Codex rejects application inference profiles with a 400 response, so Codex requires a system profile and its spend cannot be tagged per AIP. Use invocation logs or CloudTrail to attribute activity by role session, or separate accounts or permission sets to separate usage.
 
 ### Permissions, and why IAM is the real model boundary
 
@@ -20,27 +21,39 @@ The generated Claude Code policy limits the `/model` picker to the tiers you con
 cp config/config.example.json config/config.json
 ```
 
+Choose products on the command line. Shared fields are always required and validated. A product's section is required and validated only when that product is selected. Unselected sections may be omitted. The entire file is decoded strictly, so an unknown field or a field with the wrong JSON type fails even in an unselected section.
+
+Existing deployment configs must be rewritten by hand using the new example.
+
+### Shared fields
+
 | Field | Value |
 | --- | --- |
-| `aws.account_id` | The 12-digit account that holds the AIPs |
-| `aws.bedrock_region` | The region the AIPs are in |
+| `aws.account_id` | The 12-digit AWS account used by the selected products |
+| `aws.bedrock_region` | The region used for Bedrock requests and Claude AIPs |
 | `aws.sso_start_url` | Your access portal URL, such as `https://example.awsapps.com/start` |
 | `aws.sso_region` | The IAM Identity Center region |
 | `aws.sso_role_name` | The permission set name |
-| `models[].tier` | `opus`, `sonnet` or `haiku`; one model per tier. Sonnet and Haiku are required, Opus is optional |
-| `models[].aip_arn` | The AIP ARN; must match `account_id` and `bedrock_region` |
-| `models[].anthropic_model_id` | The Anthropic model ID the AIP routes to (see below) |
-| `models[].label` | Optional name Claude Desktop shows; defaults to the capitalized tier, such as `Sonnet` |
-| `default_tier` | Optional tier both apps start with; defaults to `sonnet`. Must be a configured tier |
-| `codex.enabled` | Optional. Set to `true` to render Codex managed configuration; omitted or `false` keeps the existing Claude-only output |
+| `macos_profile.identifier_prefix` | Reverse-DNS prefix, such as `com.example.ccwb`. Keep it stable so updates replace the installed profiles |
+| `macos_profile.organization` | Organization shown in System Settings |
+
+### Claude fields
+
+| Field | Value |
+| --- | --- |
+| `claude.models` | Object keyed by `opus`, `sonnet` or `haiku`. Sonnet and Haiku are required, Opus is optional |
+| `claude.models.<tier>.aip_arn` | The AIP ARN, matching `aws.account_id` and `aws.bedrock_region` |
+| `claude.models.<tier>.anthropic_model_id` | The Anthropic model ID the AIP routes to (see below) |
+| `claude.models.<tier>.label` | Optional name Claude Desktop shows, defaulting to the capitalized tier |
+| `claude.default_tier` | Optional starting tier for Claude Desktop and Claude Code, defaulting to `sonnet`. Must be configured |
+| `claude.desktop_mcp_servers[]` | Optional Jarvis Registry MCP endpoints, each with `name` and `url` (the final HTTPS address) |
+
+### Codex fields
+
+| Field | Value |
+| --- | --- |
 | `codex.default_model` | A Global (`global.openai.…`) or US Geo (`us.openai.…`) Bedrock Runtime inference profile ID, such as `global.openai.gpt-6.1-terra`. The generator checks only the form: check the model's AWS model card that the profile can be called from `aws.bedrock_region` (US Geo profiles also work from the Canadian Regions), and grant it in IAM |
 | `codex.reasoning_effort` | `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`, `ultra` or `persistent`. Each model supports only some of these; check the model card |
-| `desktop.mcp_servers[]` | Optional remote MCP servers: `name`, `url` (final https address) and, for a server that needs sign-in, `oauth` |
-| `desktop.mcp_servers[].oauth.client_id` | The public OAuth client registered for Claude Desktop at the server's authorization server (see below) |
-| `desktop.mcp_servers[].oauth.scope` | Optional space-separated scopes Desktop requests. Without it, Desktop requests every scope the server advertises |
-| `desktop.mcp_servers[].oauth.callback_port` | Optional loopback port Desktop receives the sign-in on; defaults to `47280`. Must be between 1024 and 49151 |
-| `profile.identifier` | Reverse-DNS identifier. **Keep it stable**: a profile with the same identifier replaces the installed one |
-| `profile.display_name`, `profile.organization` | Shown in System Settings |
 
 To find the AIPs and the models behind them:
 
@@ -53,45 +66,29 @@ Turn the foundation model ID into `anthropic_model_id` by dropping the `anthropi
 
 ### Opus and the default model
 
-Without an Opus model, the `opus` alias isn't allowed in Claude Code and Claude Desktop doesn't offer Opus. If you don't provision an Opus AIP, delete the `opus` entry from the example config. Opus costs more per token than Sonnet, and on Bedrock every token is billed, so set `default_tier` to `opus` only as a deliberate choice. The Opus tier and `default_tier` haven't been tested end to end yet; see the [test plan](test-plan.md).
+Without an Opus model, the `opus` alias isn't allowed in Claude Code and Claude Desktop doesn't offer Opus. If you don't provision an Opus AIP, delete the `opus` entry from `claude.models`. Opus costs more per token than Sonnet, and on Bedrock every token is billed, so set `claude.default_tier` to `opus` only as a deliberate choice. The Opus tier and `claude.default_tier` haven't been tested end to end yet; see the [test plan](test-plan.md).
 
 ### MCP connectors with OAuth
 
-Claude Desktop signs each person in to an OAuth connector itself. It opens the browser and receives the result on a temporary listener at `http://127.0.0.1:<callback_port>/callback`. The policy always gives Desktop a client registered in advance and a callback port of 47280 by default, because Desktop's own automatic client registration doesn't work reliably on Windows:
+Every `claude.desktop_mcp_servers` entry must point to a Jarvis Registry MCP endpoint. The policy always supplies the public static client `jarvis-registry-claude-desktop`, scope `mcp-proxy-ops` and callback port `47280`. Claude Desktop opens the browser and receives the sign-in result at `http://127.0.0.1:47280/callback`. This connector configuration supports Jarvis Registry's authorization server only and requires sign-in.
 
-- Automatic registration always listens on port 53280. On Windows that port is inside the dynamic port range (49152–65535 by default), from which WSL2, Docker Desktop and Hyper-V reserve blocks of ports. When a block covers 53280, **Connect** shows only a brief "connection failed" message, and Desktop's `main.log` records `listen EACCES: permission denied 127.0.0.1:53280`. The blocks move after each reboot, so the same machine can work one day and fail the next.
-- Desktop accepts a different port only together with a client ID.
+Desktop's automatic registration uses port 53280. On Windows, that port falls in the dynamic range from which WSL2, Docker Desktop and Hyper-V reserve blocks. If reserved, **Connect** fails and `main.log` records `listen EACCES: permission denied 127.0.0.1:53280`. The fixed client and port 47280 keep the callback below that range.
 
-Port 47280 is below the dynamic range, so Windows never reserves it, and it's in a block IANA hasn't assigned. The generator rejects ports outside 1024–49151.
-
-For each OAuth server, register **one** client at its authorization server for every device to share:
-
-- A public client with no secret: `token_endpoint_auth_method` `none`, protected by PKCE (S256). A secret in a policy file would be readable on every device, so Desktop doesn't need one.
-- Redirect URI `http://127.0.0.1:47280/callback`, or your `callback_port`.
-- Grant types `authorization_code` and `refresh_token`, so Desktop can renew the sign-in in the background.
-
-If the server supports dynamic client registration (its OAuth metadata lists a `registration_endpoint`), one request registers the client and returns its `client_id`:
-
-```bash
-curl -sS -X POST <registration_endpoint> -H 'Content-Type: application/json' -d '{
-  "client_name": "Claude Desktop",
-  "redirect_uris": ["http://127.0.0.1:47280/callback"],
-  "grant_types": ["authorization_code", "refresh_token"],
-  "response_types": ["code"],
-  "token_endpoint_auth_method": "none"}'
-```
-
-Confirm with the server's operators that the client is kept permanently. Some servers delete dynamically registered clients after a while or on redeploy, and every device's connector then fails until you register a new client and redeploy the policy. For the Jarvis Registry, a static client built into the server is planned; see [Jarvis Registry: a static OAuth client for Claude Desktop](jarvis-static-oauth-client.md).
+Before deploying the new policies, confirm that `jarvis.ascendingdc.com` runs an auth-server containing the static client introduced in Jarvis Registry commit `0cfbd576`. The temporary client registered on 2026-10-22 expires around 2026-11-22.
 
 Claude Desktop doesn't follow HTTP redirects from the MCP URL or its OAuth metadata, so use final addresses.
 
 ## 3. Generate
 
 ```bash
-make policies        # or: go run ./cmd/ccwb-policy -config config/config.json -out dist
+make policies PRODUCTS="claude codex"
+# Equivalent command, with flags before products
+go run ./cmd/ccwb-policy -config config/config.json -out dist claude codex
 ```
 
-The command validates every field first and lists all problems, each with its field path. It writes:
+Use `claude` for Claude Desktop and Claude Code, `codex` for Codex, or both. A Codex-only config can omit the `claude` section entirely. Products are required, duplicates are ignored, and unknown products are rejected. `make examples` selects both products automatically, and `-example` rejects product arguments.
+
+The command validates the shared fields and selected sections before writing, and reports all field validation errors together. With both products selected it writes the following files.
 
 ```
 dist/macos/Claude-CCWB.mobileconfig    one profile, two payloads: Claude Desktop and Claude Code
@@ -104,7 +101,11 @@ dist/macos/codex-requirements-CCWB.toml
 dist/windows/codex-requirements-CCWB.toml
 ```
 
-On a Mac, run `plutil -lint` for both `.mobileconfig` files; each should print `OK`.
+Claude produces its `.mobileconfig` and `.reg`. Codex produces its `.mobileconfig` and the two TOML copies. Both selections include the two AWS snippets, for four files with Claude, five with Codex and seven with both.
+
+Use an empty output directory for packaging. Files left by a previous run remain in `dist/` even when that product is omitted in the next run.
+
+On a Mac, run `plutil -lint` for both `.mobileconfig` files. Each should print `OK`. Follow the [test plan](test-plan.md#before-you-start) for the mainland China and US testing split before testing clients.
 
 ## 4. Distribute
 
@@ -116,7 +117,7 @@ The repository doesn't distribute anything. Pick what fits:
 - **Codex on macOS.** Deploy `Codex-CCWB.mobileconfig` through the user channel. It writes the requirements as Base64 TOML (`requirements_toml_base64`) under the `com.openai.codex` preference domain. Without MDM, install `codex-requirements-CCWB.toml` as `/etc/codex/requirements.toml`.
 - **Codex on Windows.** Deploy `codex-requirements-CCWB.toml` as `%ProgramData%\OpenAI\Codex\requirements.toml`, writable only by administrators. Codex has no registry or Group Policy settings, so use Intune, Group Policy file deployment or a similar tool.
 
-To change models or settings later, update the config, regenerate and reinstall. On macOS the new profile replaces the old one as long as `profile.identifier` hasn't changed.
+To change models or settings later, update the config, regenerate and reinstall. The macOS identifiers are `<prefix>.claude` and `<prefix>.codex`, and retain their identity while `macos_profile.identifier_prefix` is unchanged. For the initial upgrade to this schema, remove older Claude and Codex profiles first. Their display names are the same, but their identifiers changed, so macOS would otherwise keep both.
 
 ## 5. What the policies set
 
@@ -127,14 +128,14 @@ To change models or settings later, update the config, regenerate and reinstall.
 | `inferenceProvider` | `bedrock` |
 | `inferenceCredentialKind` | `interactive`: Desktop's own IAM Identity Center sign-in |
 | `inferenceBedrockRegion`, `inferenceBedrockSso*` | From `aws.*` |
-| `inferenceModels` | JSON list of the AIPs with labels and tiers. The `default_tier` model comes first, which makes it Desktop's default |
-| `managedMcpServers` | JSON list of `desktop.mcp_servers`; omitted when empty. Each `oauth` becomes Desktop's `clientId`, `scope` and `callbackPort`, with the port always set |
+| `inferenceModels` | JSON list of the AIPs with labels and tiers. The `claude.default_tier` model comes first, which makes it Desktop's default |
+| `managedMcpServers` | JSON list of `claude.desktop_mcp_servers`, omitted when empty. Every entry has fixed `oauth` with `clientId` `jarvis-registry-claude-desktop`, `scope` `mcp-proxy-ops` and `callbackPort` `47280` |
 
 **Claude Code** (`com.anthropic.claudecode` payload, or the JSON `Settings` value under `HKLM\SOFTWARE\Policies\ClaudeCode`):
 
 | Key | Value |
 | --- | --- |
-| `env` | `CLAUDE_CODE_USE_BEDROCK=1`, `AWS_PROFILE=CCWB`, `AWS_REGION`, `ANTHROPIC_MODEL` set to the `default_tier` AIP, and `ANTHROPIC_DEFAULT_<TIER>_MODEL` set to each configured tier's AIP |
+| `env` | `CLAUDE_CODE_USE_BEDROCK=1`, `AWS_PROFILE=CCWB`, `AWS_REGION`, `ANTHROPIC_MODEL` set to the `claude.default_tier` AIP, and `ANTHROPIC_DEFAULT_<TIER>_MODEL` set to each configured tier's AIP |
 | `awsAuthRefresh` | `aws sso login --profile CCWB`, run only after credentials have expired |
 | `modelOverrides` | Each `anthropic_model_id` mapped to its AIP |
 | `availableModels`, `enforceAvailableModels` | Only the configured tiers' aliases, including for the Default option. Without this, Claude Code's Bedrock default is Opus through a public inference profile, which bypasses your AIPs |

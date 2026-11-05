@@ -2,10 +2,12 @@
 
 This sets up Claude Desktop, the Claude Code CLI and, optionally, Codex (the ChatGPT desktop app, Codex CLI and IDE extension) on your Mac to use your organization's models on Amazon Bedrock. You sign in with your organization account through AWS IAM Identity Center. Nothing is installed except configuration profiles and a few lines in `~/.aws/config`.
 
-You need these files from whoever maintains your organization's configuration, or from `dist/macos/` if you generated them yourself:
+Follow the [test plan](test-plan.md#before-you-start) for implementation testing before installing policies or signing in.
+
+Use the files for your selected products from whoever maintains your organization's configuration, or from `dist/macos/` if you generated them yourself:
 
 - `Claude-CCWB.mobileconfig`: the configuration profile for Claude Desktop and Claude Code
-- `aws-config-CCWB.ini`: the AWS CLI profile Claude Code signs in with
+- `aws-config-CCWB.ini`: the shared AWS CLI profile Claude Code and Codex sign in with
 - `Codex-CCWB.mobileconfig`: optional, separate managed configuration for local Codex/ChatGPT Work
 
 If your organization's IT installs the profile for you through device management, skip step 2.
@@ -33,7 +35,7 @@ If the file already has a `[profile CCWB]` or `[sso-session ccwb]` section from 
 
 ## 2. Install the configuration profile
 
-1. Remove any earlier Claude Desktop profile first: **System Settings → General → Device Management**, select it, and click **−**.
+1. In **System Settings → General → Device Management**, remove the Claude profile from an earlier setup and any older Codex profile before installing the new versions. Their display names are the same, but the identifiers changed, so macOS would otherwise keep both. Select each old profile and click **−**. Have IT replace profiles managed by your organization.
 2. Double-click `Claude-CCWB.mobileconfig`. macOS says the profile was downloaded.
 3. Open **System Settings → General → Device Management**, select the profile, and click **Install**. It shows as "Unverified" unless your organization signed it; that's expected.
 
@@ -73,7 +75,7 @@ Good to know:
 
 Only do this when your organization has approved Codex on Bedrock and provided `Codex-CCWB.mobileconfig`.
 
-1. Double-click `Codex-CCWB.mobileconfig`, then install **Codex on Amazon Bedrock (CCWB)** under **System Settings → General → Device Management**. This is separate from the Claude profile, so either one can be rolled back independently.
+1. Remove any Codex profile from an earlier setup under **System Settings → General → Device Management**, even if its name matches the new one. The identifier changed. Have IT replace managed profiles. Then double-click `Codex-CCWB.mobileconfig` and install **Codex on Amazon Bedrock (CCWB)** under **System Settings → General → Device Management**. This is separate from the Claude profile, so either one can be rolled back independently.
 2. Run `aws sso login --profile CCWB` and confirm `aws sts get-caller-identity --profile CCWB` succeeds.
 3. Quit the ChatGPT/Codex desktop app and any Codex CLI or IDE extension, run `codex app-server daemon restart` in Terminal, then reopen them.
 4. Start a new local Codex task, check `/status` for provider `amazon-bedrock-runtime`, then send `Reply with exactly: bedrock-ok`.
@@ -89,7 +91,7 @@ The two sign-ins are independent; signing out of one doesn't affect the other.
 
 ## Uninstall
 
-1. **System Settings → General → Device Management**: select the Claude profile and click **−**. If Codex was enabled, remove **Codex on Amazon Bedrock (CCWB)** separately. Quit and reopen the affected apps.
+1. In **System Settings → General → Device Management**, remove the installed Claude and Codex profiles for the products you are uninstalling. Include any older profiles left from an earlier setup, even if they share the same display names. Have IT remove managed profiles. Quit and reopen the affected apps.
 2. Remove the `[sso-session ccwb]` and `[profile CCWB]` sections from `~/.aws/config`.
 
 ## Troubleshooting

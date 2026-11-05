@@ -2,10 +2,12 @@
 
 This sets up Claude Desktop, the Claude Code CLI and optionally local Codex clients on Windows to use your organization's models on Amazon Bedrock, signed in through AWS IAM Identity Center.
 
-You need these files from whoever maintains your organization's configuration, or from `dist/windows/` if you generated them yourself:
+Follow the [test plan](test-plan.md#before-you-start) for implementation testing before installing policies or signing in.
+
+Use the files for your selected products from whoever maintains your organization's configuration, or from `dist/windows/` if you generated them yourself:
 
 - `Claude-CCWB.reg`: the policies for Claude Desktop and Claude Code
-- `aws-config-CCWB.ini`: the AWS CLI profile Claude Code signs in with
+- `aws-config-CCWB.ini`: the shared AWS CLI profile Claude Code and Codex sign in with
 - `codex-requirements-CCWB.toml`: optional, for Codex. It enforces the Bedrock Runtime provider, AWS profile and Region, and sets the starting model
 
 If your organization's IT deploys the policies for you through Intune or Group Policy, skip step 2.
@@ -93,7 +95,7 @@ Claude Desktop's log is `main.log` in `%LOCALAPPDATA%\Packages\Claude_pzs8sxrjxf
 | --- | --- |
 | Claude Desktop doesn't offer AWS sign-in | Check that step 2 worked, then quit Claude Desktop completely (see step 3) and open it again |
 | A connector is missing | Quit and reopen Claude Desktop. If it's still missing, send your administrator the `managedMcpServers` lines from `main.log`; Desktop leaves out a connector whose settings it can't read and logs why |
-| **Connect** shows only a brief "connection failed" message | Look in `main.log` for `listen EACCES` or a port that's in use. Desktop receives the connector sign-in on a local port (47280 unless your organization chose another), and another program on your computer may hold it. Send the line to your administrator; never share sign-in codes or tokens |
+| **Connect** shows only a brief "connection failed" message | Look in `main.log` for `listen EACCES` or a port that's in use. Desktop receives the connector sign-in on a local port (fixed at 47280), and another program on your computer may hold it. Send the line to your administrator; never share sign-in codes or tokens |
 | Claude Code: `AWS authentication failed` | Run `aws sso login --profile CCWB`, then retry. If it persists, ask your administrator to check your permission set |
 | Claude Code: `403 … not authorized … with an explicit deny` | You asked for a model outside your organization's AIPs, for example with `--model`. Use `/model` to pick one of your organization's models |
 | `/status` doesn't list a managed settings source | The policies weren't imported under `HKEY_LOCAL_MACHINE`; repeat step 2 from a terminal opened with **Run as administrator** |

@@ -1,14 +1,16 @@
-// Command ccwb-policy renders the Claude and optional Codex managed policies
-// for macOS and Windows, plus the AWS CLI profile they rely on, from one
-// deployment config. Run it from the repository root.
+// Command ccwb-policy renders managed policies for the products selected on
+// the command line, including Codex requirements when codex is selected, plus
+// their shared AWS CLI profile. Run it from the repository root.
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"github.com/ascending-llc/claude-3p-config/policy"
 )
@@ -37,8 +39,23 @@ func run(args []string, stdout, stderr io.Writer) int {
 	outDir := fs.String("out", defaultOut, "directory to write the macos/ and windows/ folders into")
 	example := fs.Bool("example", false,
 		"render "+exampleConfig+" with placeholders allowed into "+exampleOut+"/ (the committed examples)")
+	fs.Usage = func() {
+		_, _ = fmt.Fprintln(stderr, "Usage: ccwb-policy [-config path] [-out dir] claude|codex ...")
+		_, _ = fmt.Fprintln(stderr, "       ccwb-policy -example [-config path] [-out dir]")
+
+		fs.PrintDefaults()
+	}
 
 	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+
+	products, err := parseProducts(fs.Args(), *example)
+	if err != nil {
+		_, _ = fmt.Fprintln(stderr, err.Error())
+
+		fs.Usage()
+
 		return 2
 	}
 
@@ -55,7 +72,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 
-	cfg, err := policy.Load(*configPath, policy.Options{AllowPlaceholders: *example})
+	cfg, err := policy.Load(*configPath, policy.Options{Products: products, AllowPlaceholders: *example})
 	if err != nil {
 		_, _ = fmt.Fprintln(stderr, err.Error())
 
@@ -83,14 +100,45 @@ func run(args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
+func parseProducts(args []string, example bool) ([]policy.Product, error) {
+	if example {
+		if len(args) > 0 {
+			return nil, errors.New("-example does not accept products")
+		}
+
+		return []policy.Product{policy.ProductClaude, policy.ProductCodex}, nil
+	}
+
+	if len(args) == 0 {
+		return nil, errors.New("select at least one product: claude or codex")
+	}
+
+	var products []policy.Product
+	for _, arg := range args {
+		product := policy.Product(arg)
+		if !product.Valid() {
+			return nil, fmt.Errorf("unknown product %q", arg)
+		}
+
+		if !slices.Contains(products, product) {
+			products = append(products, product)
+		}
+	}
+
+	return products, nil
+}
+
 func outputs(a policy.Artifacts, example bool) []output {
 	var out []output
 
 	if example {
-		out = []output{
-			{"Claude-CCWB.example.mobileconfig", a.Mobileconfig},
-			{"Claude-CCWB.example.reg", a.Reg},
-			{"aws-config-CCWB.example.ini", a.AWSConfig},
+		out = []output{{"aws-config-CCWB.example.ini", a.AWSConfig}}
+
+		if len(a.Mobileconfig) > 0 {
+			out = append(out,
+				output{"Claude-CCWB.example.mobileconfig", a.Mobileconfig},
+				output{"Claude-CCWB.example.reg", a.Reg},
+			)
 		}
 
 		if len(a.CodexRequirements) > 0 {
@@ -104,10 +152,15 @@ func outputs(a policy.Artifacts, example bool) []output {
 	}
 
 	out = []output{
-		{filepath.Join("macos", "Claude-CCWB.mobileconfig"), a.Mobileconfig},
 		{filepath.Join("macos", "aws-config-CCWB.ini"), a.AWSConfig},
-		{filepath.Join("windows", "Claude-CCWB.reg"), a.Reg},
 		{filepath.Join("windows", "aws-config-CCWB.ini"), a.AWSConfig},
+	}
+
+	if len(a.Mobileconfig) > 0 {
+		out = append(out,
+			output{filepath.Join("macos", "Claude-CCWB.mobileconfig"), a.Mobileconfig},
+			output{filepath.Join("windows", "Claude-CCWB.reg"), a.Reg},
+		)
 	}
 
 	if len(a.CodexRequirements) > 0 {

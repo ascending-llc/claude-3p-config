@@ -29,9 +29,10 @@ gelato:
 	@pre-commit run gelato
 .PHONY: gelato
 
-# Render config/config.json into dist/macos and dist/windows.
+# Render config/config.json into dist/macos and dist/windows for the products in
+# PRODUCTS, e.g. make policies PRODUCTS="claude codex".
 policies:
-	@go run ./cmd/ccwb-policy
+	@go run ./cmd/ccwb-policy $(PRODUCTS)
 .PHONY: policies
 
 # Re-render the committed examples/ from config/config.example.json.

@@ -8,11 +8,11 @@
 			<key>PayloadDisplayName</key>
 			<string>Codex</string>
 			<key>PayloadIdentifier</key>
-			<string>com.example.claude.ccwb.codex.managed</string>
+			<string>com.example.ccwb.codex.managed</string>
 			<key>PayloadType</key>
 			<string>com.openai.codex</string>
 			<key>PayloadUUID</key>
-			<string>A08CF2CF-76A4-8A75-B89A-1671A258CE36</string>
+			<string>3BFB37CE-B2DA-87FE-9E47-652BCE440193</string>
 			<key>PayloadVersion</key>
 			<integer>1</integer>
 			<key>requirements_toml_base64</key>
@@ -24,7 +24,7 @@
 	<key>PayloadDisplayName</key>
 	<string>Codex on Amazon Bedrock (CCWB)</string>
 	<key>PayloadIdentifier</key>
-	<string>com.example.claude.ccwb.codex</string>
+	<string>com.example.ccwb.codex</string>
 	<key>PayloadOrganization</key>
 	<string>Example</string>
 	<key>PayloadScope</key>
@@ -32,7 +32,7 @@
 	<key>PayloadType</key>
 	<string>Configuration</string>
 	<key>PayloadUUID</key>
-	<string>8B960B53-C50D-885E-9066-5D628A9DC511</string>
+	<string>2145774A-A3A2-8190-9DCB-7434CC2E93AF</string>
 	<key>PayloadVersion</key>
 	<integer>1</integer>
 </dict>
