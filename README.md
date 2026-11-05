@@ -11,6 +11,8 @@ This repository sets up **Claude Desktop**, the **Claude Code CLI**, and local *
 
 The generator `ccwb-policy` renders the selected products from one `config/config.json`. Choose `claude` for Claude Desktop and Claude Code, `codex` for Codex, or both.
 
+The status below records historical validation. See the [test plan](docs/test-plan.md#results) for AS-1975 results and remaining checks.
+
 | Platform | Output | Status |
 | --- | --- | --- |
 | macOS | Claude and Codex `.mobileconfig` profiles, the Codex `requirements.toml`, and `aws-config-CCWB.ini` | Claude tested end to end; Codex managed profile tested with the CLI and the ChatGPT app; some checks still open (see the test plan) |

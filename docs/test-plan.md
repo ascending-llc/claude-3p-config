@@ -4,6 +4,25 @@ Run this on each new platform, and again after changing the config schema or the
 
 ## Results
 
+### AS-1975 — 2026-11-05
+
+macOS 26.5.2. Separately authorized login-only checks used the current generator's output through temporary local or process configuration.
+
+| Check | Result |
+| --- | --- |
+| Offline regression | Passed: `make all` (race-enabled tests and lint), both macOS profile format checks, and Windows registry-file decoding. |
+| Claude Code 2.1.318 | Passed: generated settings selected Bedrock; AWS STS matched the configured account and role. |
+| Claude Desktop 4.16336.0 | Passed: AWS sign-in and Jarvis connector OAuth; the connector showed **Connected**. |
+| Codex CLI 0.166.0-alpha.6 | Passed: an independent stdio process read the expected provider, AWS settings, model and effort from temporary overrides; AWS STS matched the configured account and role. |
+
+The CLI checks reused valid AWS SSO sessions. These results do not establish installed management-policy enforcement or complete interactive-client regression. Windows clients, expired-session refresh and model availability/inference remain unverified for this change.
+
+Temporary configurations were restored or removed. These login-only checks preserved the existing Codex configuration and background service; normal authentication caches remain.
+
+### Historical results (before AS-1975)
+
+These records describe earlier versions and do not establish regression coverage for AS-1975.
+
 | Platform | Date | Versions | Result |
 | --- | --- | --- | --- |
 | macOS 26.7.1 | 2026-10-21 | Claude Desktop 2.26454.2, Claude Code 2.1.306, AWS CLI 2.37.12 | All passed, with the administrator permission set. Sonnet and Haiku only: the Opus tier and `claude.default_tier` were added later and are untested. D4 passed with automatic client registration; re-run it with the pre-registered client and callback port 47280 |
@@ -11,11 +30,10 @@ Run this on each new platform, and again after changing the config schema or the
 | macOS (Codex direct Runtime check) | 2026-10-30 | Codex 0.165.0-alpha.1.2 | Global GPT-6 Luna, GPT-6.1 Sol and GPT-6.1 Terra each returned `bedrock-ok`; 6.1 Sol completed a local `pwd` tool call. `auth_refresh` mechanism verified the same day: on SSO expiry Codex invokes the refresh command and retries. This predates moving the provider definition into `requirements.toml` |
 | macOS 26.7.2 (Codex managed profile) | 2026-11-02 | Codex CLI 0.166.0, ChatGPT app 26.1027.30824 (bundled Codex 0.166.0-alpha.5.1), AWS CLI 2.37.12 in `~/.local/bin` | `Codex-CCWB.mobileconfig` installed in the user scope. The CLI and the ChatGPT app both used `amazon-bedrock-runtime` with GPT-6.1 Terra, with the administrator permission set. The CLI first failed C1 with `modelProviderPolicyConflict` until the Codex background server was restarted (see C1). C10 passed after `aws sso logout`: the app copies the login shell's environment at launch, so `aws` in `~/.local/bin` was found. Untested: the files under `/etc/codex`, C7, C9 in the CLI with this layout, and a non-admin permission set. Re-tested the same day after `[models.new_thread]` replaced `managed_config.toml`: a new thread started on GPT-6.1 Terra with medium effort |
 | Windows 11 (Codex) | 2026-11-02 | Codex CLI and ChatGPT app | With the administrator permission set: C1, C2 and C9 passed in the CLI; C1 and C2 passed in the ChatGPT app after signing in with a Google account. Choosing Amazon Bedrock in the app's sign-in screen fails by design (it selects the `amazon-bedrock` provider). Codex ignores `managed_config.toml` on Windows, so the starting model and effort were wrong until they moved to `[models.new_thread]` in `requirements.toml`, which both clients then applied (tested by editing the installed file). Untested: C7, C10, and a non-admin permission set |
-| macOS and Windows (AS-1975) | Pending | New config schema, profile identifiers and fixed Jarvis OAuth | These changes have not been re-tested in installed clients on either platform. Offline generator tests do not establish sign-in or inference results. |
 
 ## Before you start
 
-AS-1975 separates offline implementation checks from client testing by location. Mainland China implementers use the offline checks below. US-based testers run client sign-in and inference checks.
+The original AS-1975 spec assigns the full regression checklist below by location. The separately authorized login-only checks recorded above cover a narrower scope.
 
 - **Implementer in mainland China.** Run `make all`, `plutil -lint` on both generated `.mobileconfig` files, and decode the Windows `.reg` with `iconv -f UTF-16 -t UTF-8`. Keep these checks offline. Do not run `aws sso login --profile CCWB`, send a Codex prompt, or open Claude Desktop or Claude Code with the policy installed. This restriction also applies while using a VPN.
 - **Optional status-only check.** Codex C1 may be checked on a machine with no `[profile CCWB]` in `~/.aws/config` and no other AWS credentials available. Inspect `/status` only.
