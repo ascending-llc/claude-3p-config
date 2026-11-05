@@ -1,6 +1,6 @@
 # macOS user guide
 
-This sets up Claude Desktop, the Claude Code CLI and, optionally, Codex (the ChatGPT desktop app, Codex CLI and IDE extension) on your Mac to use your organization's models on Amazon Bedrock. You sign in with your organization account through AWS IAM Identity Center. Nothing is installed except configuration profiles and a few lines in `~/.aws/config`.
+This sets up your selected Claude or Codex clients on your Mac to use your organization's models on Amazon Bedrock. You sign in with your organization account through AWS IAM Identity Center. The setup uses configuration profiles and a few lines in `~/.aws/config`.
 
 Follow the [test plan](test-plan.md#before-you-start) for implementation testing before installing policies or signing in.
 
@@ -8,15 +8,18 @@ Use the files for your selected products from whoever maintains your organizatio
 
 - `Claude-CCWB.mobileconfig`: the configuration profile for Claude Desktop and Claude Code
 - `aws-config-CCWB.ini`: the shared AWS CLI profile Claude Code and Codex sign in with
-- `Codex-CCWB.mobileconfig`: optional, separate managed configuration for local Codex/ChatGPT Work
+- `Codex-CCWB.mobileconfig`: managed configuration for local Codex/ChatGPT Work when Codex is selected
+
+For a Codex-only setup, complete step 1 and then go directly to step 6. For Claude, follow steps 1–5 for the clients you use. If you selected both products, also complete step 6.
 
 If your organization's IT installs the profile for you through device management, skip step 2.
 
 ## Before you start
 
-- Claude Desktop, and the Claude Code CLI if you use it
-- AWS CLI v2 (`aws --version`); install it with `brew install awscli` or [AWS's installer](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)
-- Access to the AWS account and permission set your organization assigned for Claude
+- **Claude users.** Install Claude Desktop, Claude Code, or both, according to which clients you use.
+- **Codex users.** Install your chosen local client, such as the ChatGPT desktop app, Codex CLI or IDE extension.
+- **Claude Code and Codex users.** Install AWS CLI v2 with `brew install awscli` or AWS's installer, and check `aws --version`. [AWS installer](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)
+- Access to the AWS account and permission set your organization assigned for the selected products
 
 Tested on macOS 26.7.1 with Claude Desktop 2.26454.2, Claude Code 2.1.306 and AWS CLI 2.37.12.
 
@@ -35,7 +38,7 @@ If the file already has a `[profile CCWB]` or `[sso-session ccwb]` section from 
 
 ## 2. Install the configuration profile
 
-1. In **System Settings → General → Device Management**, remove the Claude profile from an earlier setup and any older Codex profile before installing the new versions. Their display names are the same, but the identifiers changed, so macOS would otherwise keep both. Select each old profile and click **−**. Have IT replace profiles managed by your organization.
+1. In **System Settings → General → Device Management**, remove the Claude profiles from an earlier setup before installing the new version. Their display names are the same, but the identifiers changed, so macOS would otherwise keep both. Select each old Claude profile and click **−**. Have IT replace profiles managed by your organization. When also upgrading Codex, remove its older profiles as described in step 6.
 2. Double-click `Claude-CCWB.mobileconfig`. macOS says the profile was downloaded.
 3. Open **System Settings → General → Device Management**, select the profile, and click **Install**. It shows as "Unverified" unless your organization signed it; that's expected.
 
@@ -92,7 +95,7 @@ The two sign-ins are independent; signing out of one doesn't affect the other.
 ## Uninstall
 
 1. In **System Settings → General → Device Management**, remove the installed Claude and Codex profiles for the products you are uninstalling. Include any older profiles left from an earlier setup, even if they share the same display names. Have IT remove managed profiles. Quit and reopen the affected apps.
-2. Remove the `[sso-session ccwb]` and `[profile CCWB]` sections from `~/.aws/config`.
+2. Remove the `[sso-session ccwb]` and `[profile CCWB]` sections from `~/.aws/config` only after all clients using them have been retired. Keep these shared sections while either Claude Code or Codex still uses them.
 
 ## Troubleshooting
 

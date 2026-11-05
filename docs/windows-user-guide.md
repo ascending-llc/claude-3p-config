@@ -1,6 +1,6 @@
 # Windows user guide
 
-This sets up Claude Desktop, the Claude Code CLI and optionally local Codex clients on Windows to use your organization's models on Amazon Bedrock, signed in through AWS IAM Identity Center.
+This sets up your selected Claude or Codex clients on Windows to use your organization's models on Amazon Bedrock, signed in through AWS IAM Identity Center.
 
 Follow the [test plan](test-plan.md#before-you-start) for implementation testing before installing policies or signing in.
 
@@ -8,15 +8,18 @@ Use the files for your selected products from whoever maintains your organizatio
 
 - `Claude-CCWB.reg`: the policies for Claude Desktop and Claude Code
 - `aws-config-CCWB.ini`: the shared AWS CLI profile Claude Code and Codex sign in with
-- `codex-requirements-CCWB.toml`: optional, for Codex. It enforces the Bedrock Runtime provider, AWS profile and Region, and sets the starting model
+- `codex-requirements-CCWB.toml`: for Codex when selected. It enforces the Bedrock Runtime provider, AWS profile and Region, and sets the starting model
+
+For a Codex-only setup, complete step 1 and then go directly to step 6. For Claude, follow steps 1–5 for the clients you use. If you selected both products, also complete step 6.
 
 If your organization's IT deploys the policies for you through Intune or Group Policy, skip step 2.
 
 ## Before you start
 
-- Claude Desktop, and the Claude Code CLI if you use it
-- AWS CLI v2: `winget install Amazon.AWSCLI`, then open a new terminal and check `aws --version`
-- **Administrator rights** for step 2. Both policies live under `HKEY_LOCAL_MACHINE`: Claude Code ignores some managed-only settings in the per-user hive, and Claude Desktop ignores per-user policy whenever machine policy exists.
+- **Claude users.** Install Claude Desktop, Claude Code, or both, according to which clients you use.
+- **Codex users.** Install your chosen local client, such as the ChatGPT desktop app, Codex CLI or IDE extension.
+- **Claude Code and Codex users.** Install AWS CLI v2 with `winget install Amazon.AWSCLI`, then open a new terminal and check `aws --version`.
+- **Administrator rights** for importing Claude policies in step 2 and installing the Codex system configuration in step 6. Claude policies live under `HKEY_LOCAL_MACHINE`. Claude Code ignores some managed-only settings in the per-user hive, and Claude Desktop ignores per-user policy whenever machine policy exists.
 
 Tested on Windows 10 Home 22H2 (build 19045) with Claude Desktop 3.1623.4 from the Microsoft Store, Claude Code 2.1.308 and AWS CLI 2.38.4.
 
@@ -77,15 +80,19 @@ Sign out in Claude Desktop. For Claude Code, run `aws sso logout`.
 
 ## Uninstall
 
-In a terminal opened with **Run as administrator**:
+Follow the instructions for the products you are uninstalling.
+
+For Claude Code, open a terminal with **Run as administrator** and run the following command.
 
 ```powershell
 reg delete "HKLM\SOFTWARE\Policies\ClaudeCode" /v Settings /f
 ```
 
-For Claude Desktop, delete the values that `Claude-CCWB.reg` lists under `HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Claude`, for example in Registry Editor. Delete the whole key only if nothing else manages Claude Desktop on this machine. Then remove the `[sso-session ccwb]` and `[profile CCWB]` sections from `%USERPROFILE%\.aws\config`.
+For Claude Desktop, delete the values that `Claude-CCWB.reg` lists under `HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Claude`, for example in Registry Editor. Delete the whole key only if nothing else manages Claude Desktop on this machine.
 
-If Codex was enabled, have IT back up and remove `%ProgramData%\OpenAI\Codex\requirements.toml`, then restart the client. Do not remove the user's `config.toml`, `auth.json`, plugins or project settings.
+For Codex, have IT back up and remove `%ProgramData%\OpenAI\Codex\requirements.toml`, then restart the client. Do not remove the user's `config.toml`, `auth.json`, plugins or project settings.
+
+Remove the `[sso-session ccwb]` and `[profile CCWB]` sections from `%USERPROFILE%\.aws\config` only after all clients using them have been retired. Keep these shared sections while either Claude Code or Codex still uses them.
 
 ## Troubleshooting
 

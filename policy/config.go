@@ -171,7 +171,8 @@ func Parse(r io.Reader, opts Options) (Config, error) {
 		return Config{}, fmt.Errorf("decoding config: %s", err.Error())
 	}
 
-	if dec.More() {
+	var trailing json.RawMessage
+	if err := dec.Decode(&trailing); err != io.EOF {
 		return Config{}, errors.New("decoding config: unexpected data after the JSON object")
 	}
 

@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"flag"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,6 +15,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"testing/iotest"
 	"unicode/utf16"
 )
 
@@ -64,15 +66,26 @@ func TestMobileconfigIsValidProfile(t *testing.T) {
 		t.Skip("plutil is only available on macOS")
 	}
 
-	artifacts := mustRender(t, validConfig)
-	path := filepath.Join(t.TempDir(), "profile.mobileconfig")
-
-	if err := os.WriteFile(path, artifacts.Mobileconfig, 0o600); err != nil {
+	cfg, err := Load(validConfig, Options{Products: []Product{ProductClaude, ProductCodex}})
+	if err != nil {
 		t.Fatal(err)
 	}
 
-	if out, err := exec.Command("plutil", "-lint", path).CombinedOutput(); err != nil {
-		t.Fatalf("plutil -lint: %s: %s", err.Error(), out)
+	cfg.MacOSProfile.IdentifierPrefix = "com.example.custom"
+
+	artifacts, err := Render(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	path := filepath.Join(t.TempDir(), "profile.mobileconfig")
+
+	if writeErr := os.WriteFile(path, artifacts.Mobileconfig, 0o600); writeErr != nil {
+		t.Fatal(writeErr)
+	}
+
+	if out, lintErr := exec.Command("plutil", "-lint", path).CombinedOutput(); lintErr != nil {
+		t.Fatalf("plutil -lint: %s: %s", lintErr.Error(), out)
 	}
 
 	out, err := exec.Command("plutil", "-convert", "json", "-o", "-", path).Output()
@@ -81,6 +94,7 @@ func TestMobileconfigIsValidProfile(t *testing.T) {
 	}
 
 	var profile struct {
+		PayloadUUID        string           `json:"PayloadUUID"`
 		PayloadIdentifier  string           `json:"PayloadIdentifier"`
 		PayloadDisplayName string           `json:"PayloadDisplayName"`
 		PayloadContent     []map[string]any `json:"PayloadContent"`
@@ -94,13 +108,21 @@ func TestMobileconfigIsValidProfile(t *testing.T) {
 		t.Fatalf("got %d payloads, want 2", len(profile.PayloadContent))
 	}
 
-	if profile.PayloadIdentifier != "com.example.ccwb.claude" || profile.PayloadDisplayName != "Claude on Amazon Bedrock (CCWB)" {
+	if profile.PayloadIdentifier != "com.example.custom.claude" || profile.PayloadDisplayName != "Claude on Amazon Bedrock (CCWB)" {
 		t.Errorf("profile identity = %q / %q", profile.PayloadIdentifier, profile.PayloadDisplayName)
 	}
 
+	if profile.PayloadUUID != stableUUID("com.example.custom.claude") {
+		t.Errorf("profile UUID = %q, want the UUID derived from the custom prefix", profile.PayloadUUID)
+	}
+
 	desktop, claudeCode := profile.PayloadContent[0], profile.PayloadContent[1]
-	if desktop["PayloadIdentifier"] != "com.example.ccwb.claude.desktop" || claudeCode["PayloadIdentifier"] != "com.example.ccwb.claude.claudecode" {
+	if desktop["PayloadIdentifier"] != "com.example.custom.claude.desktop" || claudeCode["PayloadIdentifier"] != "com.example.custom.claude.claudecode" {
 		t.Errorf("payload identifiers = %v / %v", desktop["PayloadIdentifier"], claudeCode["PayloadIdentifier"])
+	}
+
+	if desktop["PayloadUUID"] != stableUUID("com.example.custom.claude.desktop") || claudeCode["PayloadUUID"] != stableUUID("com.example.custom.claude.claudecode") {
+		t.Errorf("payload UUIDs = %v / %v, want UUIDs derived from the custom prefix", desktop["PayloadUUID"], claudeCode["PayloadUUID"])
 	}
 
 	if desktop["PayloadType"] != "com.anthropic.claudefordesktop" || claudeCode["PayloadType"] != "com.anthropic.claudecode" {
@@ -132,15 +154,26 @@ func TestCodexMobileconfigIsValidProfile(t *testing.T) {
 		t.Skip("plutil is only available on macOS")
 	}
 
-	artifacts := mustRender(t, validConfig)
-	path := filepath.Join(t.TempDir(), "codex.mobileconfig")
-
-	if err := os.WriteFile(path, artifacts.CodexMobileconfig, 0o600); err != nil {
+	cfg, err := Load(validConfig, Options{Products: []Product{ProductClaude, ProductCodex}})
+	if err != nil {
 		t.Fatal(err)
 	}
 
-	if out, err := exec.Command("plutil", "-lint", path).CombinedOutput(); err != nil {
-		t.Fatalf("plutil -lint: %s: %s", err.Error(), out)
+	cfg.MacOSProfile.IdentifierPrefix = "com.example.custom"
+
+	artifacts, err := Render(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	path := filepath.Join(t.TempDir(), "codex.mobileconfig")
+
+	if writeErr := os.WriteFile(path, artifacts.CodexMobileconfig, 0o600); writeErr != nil {
+		t.Fatal(writeErr)
+	}
+
+	if out, lintErr := exec.Command("plutil", "-lint", path).CombinedOutput(); lintErr != nil {
+		t.Fatalf("plutil -lint: %s: %s", lintErr.Error(), out)
 	}
 
 	out, err := exec.Command("plutil", "-convert", "json", "-o", "-", path).Output()
@@ -149,6 +182,7 @@ func TestCodexMobileconfigIsValidProfile(t *testing.T) {
 	}
 
 	var profile struct {
+		PayloadUUID        string           `json:"PayloadUUID"`
 		PayloadIdentifier  string           `json:"PayloadIdentifier"`
 		PayloadDisplayName string           `json:"PayloadDisplayName"`
 		PayloadScope       string           `json:"PayloadScope"`
@@ -163,12 +197,16 @@ func TestCodexMobileconfigIsValidProfile(t *testing.T) {
 		t.Fatalf("PayloadContent = %v, want one com.openai.codex payload", profile.PayloadContent)
 	}
 
-	if profile.PayloadIdentifier != "com.example.ccwb.codex" || profile.PayloadDisplayName != "Codex on Amazon Bedrock (CCWB)" {
+	if profile.PayloadIdentifier != "com.example.custom.codex" || profile.PayloadDisplayName != "Codex on Amazon Bedrock (CCWB)" {
 		t.Errorf("profile identity = %q / %q", profile.PayloadIdentifier, profile.PayloadDisplayName)
 	}
 
-	if profile.PayloadContent[0]["PayloadIdentifier"] != "com.example.ccwb.codex.managed" {
+	if profile.PayloadContent[0]["PayloadIdentifier"] != "com.example.custom.codex.managed" {
 		t.Errorf("payload identifier = %v", profile.PayloadContent[0]["PayloadIdentifier"])
+	}
+
+	if profile.PayloadUUID != stableUUID("com.example.custom.codex") || profile.PayloadContent[0]["PayloadUUID"] != stableUUID("com.example.custom.codex.managed") {
+		t.Errorf("profile and payload UUIDs = %q / %v, want UUIDs derived from the custom prefix", profile.PayloadUUID, profile.PayloadContent[0]["PayloadUUID"])
 	}
 
 	if profile.PayloadScope != "User" {
@@ -716,7 +754,6 @@ func TestParseRejectsMalformedJSON(t *testing.T) {
 		{name: "unknown unselected codex field", input: strings.Replace(valid, `"reasoning_effort"`, `"reasoning_efort"`, 1), wantErr: `unknown field "reasoning_efort"`, products: []Product{ProductClaude}},
 		{name: "unknown unselected claude field", input: strings.Replace(valid, `"anthropic_model_id"`, `"anthropic_model"`, 1), wantErr: `unknown field "anthropic_model"`, products: []Product{ProductCodex}},
 		{name: "wrong type in unselected codex", input: strings.Replace(valid, `"reasoning_effort": "high"`, `"reasoning_effort": 1`, 1), wantErr: "cannot unmarshal number", products: []Product{ProductClaude}},
-		{name: "trailing data", input: valid + `{}`, wantErr: "unexpected data after the JSON object", products: []Product{ProductClaude, ProductCodex}},
 	}
 
 	for _, tt := range tests {
@@ -728,6 +765,47 @@ func TestParseRejectsMalformedJSON(t *testing.T) {
 			_, err := Parse(strings.NewReader(tt.input), Options{Products: tt.products})
 			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 				t.Fatalf("got %v, want an error containing %q", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestParseRequiresEndOfInput(t *testing.T) {
+	raw, err := os.ReadFile(validConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	valid := string(raw)
+
+	tests := []struct {
+		reader  io.Reader
+		name    string
+		wantErr bool
+	}{
+		{name: "end of input", reader: strings.NewReader(valid)},
+		{name: "trailing whitespace", reader: strings.NewReader(valid + " \t\r\n")},
+		{name: "extra closing brace", reader: strings.NewReader(valid + "}"), wantErr: true},
+		{name: "extra closing bracket", reader: strings.NewReader(valid + "]"), wantErr: true},
+		{name: "second object", reader: strings.NewReader(valid + "{}"), wantErr: true},
+		{name: "trailing null", reader: strings.NewReader(valid + "null"), wantErr: true},
+		{name: "trailing garbage", reader: strings.NewReader(valid + "garbage"), wantErr: true},
+		{name: "read failure", reader: io.MultiReader(strings.NewReader(valid), iotest.ErrReader(io.ErrUnexpectedEOF)), wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := Parse(tt.reader, Options{Products: []Product{ProductClaude, ProductCodex}})
+			if tt.wantErr {
+				if err == nil || !strings.Contains(err.Error(), "unexpected data after the JSON object") {
+					t.Fatalf("got %v, want a trailing-input error", err)
+				}
+
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("valid config rejected: %s", err.Error())
 			}
 		})
 	}
