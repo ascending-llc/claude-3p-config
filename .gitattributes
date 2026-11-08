@@ -2,3 +2,5 @@
 *.reg binary
 *.mobileconfig text eol=lf
 *.ini text eol=lf
+# AWS merge fixtures include deliberate BOMs and LF/CRLF line endings.
+cmd/ccwb-codex-setup/testdata/awsconfig/* -text

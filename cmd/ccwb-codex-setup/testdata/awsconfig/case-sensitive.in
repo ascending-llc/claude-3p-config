@@ -1,0 +1,5 @@
+[profile ccwb]
+region = eu-west-1
+
+[sso-session CCWB]
+sso_region = eu-west-2

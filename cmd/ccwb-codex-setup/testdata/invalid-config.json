@@ -1,0 +1,45 @@
+{
+  "aws": {
+    "account_id": "not-an-account",
+    "bedrock_region": "us-east-1",
+    "sso_start_url": "https://example.awsapps.com/start",
+    "sso_region": "us-east-2",
+    "sso_role_name": "ClaudeBedrockUser"
+  },
+  "macos_profile": {
+    "identifier_prefix": "com.example.ccwb",
+    "organization": "Example"
+  },
+  "claude": {
+    "models": {
+      "sonnet": {
+        "aip_arn": "arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/sonnet0001",
+        "anthropic_model_id": "claude-sonnet-5",
+        "label": "Sonnet"
+      },
+      "haiku": {
+        "aip_arn": "arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/haiku00001",
+        "anthropic_model_id": "claude-haiku-4-5-20251001"
+      },
+      "opus": {
+        "aip_arn": "arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/opus000001",
+        "anthropic_model_id": "claude-opus-5-5",
+        "label": "Opus"
+      }
+    },
+    "desktop_mcp_servers": [
+      {
+        "name": "example-registry",
+        "url": "https://mcp.example.com/mcp?team=a&b=\"c\""
+      },
+      {
+        "name": "static-tools",
+        "url": "https://tools.example.com/mcp"
+      }
+    ]
+  },
+  "codex": {
+    "default_model": "us.openai.gpt-6.1-sol",
+    "reasoning_effort": "hihg"
+  }
+}

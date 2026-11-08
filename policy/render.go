@@ -80,6 +80,16 @@ const (
 	claudeCodeRegKey = `HKEY_LOCAL_MACHINE\SOFTWARE\Policies\ClaudeCode`
 )
 
+// AWSConfig renders the same AWS CLI snippet as Render's Artifacts.AWSConfig.
+func (s CodexSetup) AWSConfig() []byte {
+	return renderAWSConfig(s.AWS)
+}
+
+// Requirements renders the same Codex settings as Render's Artifacts.CodexRequirements.
+func (s CodexSetup) Requirements() []byte {
+	return renderCodexRequirements(s.AWS, s.Codex)
+}
+
 // Render builds artifacts for the selected products in a config returned by
 // Load or Parse, together with their shared AWS CLI profile.
 func Render(cfg Config) (Artifacts, error) {

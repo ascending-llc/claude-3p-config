@@ -35,6 +35,12 @@ policies:
 	@go run ./cmd/ccwb-policy $(PRODUCTS)
 .PHONY: policies
 
+# Build the Codex setup program for Windows with config/config.json built in.
+codex-setup:
+	@test -f config/config.json || { echo "config/config.json is missing: copy config/config.example.json and fill it in" >&2; exit 1; }
+	@GOOS=windows GOARCH=amd64 go build -trimpath -o dist/ccwb-codex-setup.exe ./cmd/ccwb-codex-setup
+.PHONY: codex-setup
+
 # Re-render the committed examples/ from config/config.example.json.
 examples:
 	@go run ./cmd/ccwb-policy -example
