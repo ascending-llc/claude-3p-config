@@ -21,8 +21,9 @@ type awsSection struct {
 }
 
 var (
-	// Recognize bracketed section names without limiting their word count.
-	awsSectionBoundary = regexp.MustCompile(`^\s*\[[^\r\n]+\]\s*$`)
+	// Capture the header separately from its trailing comment. Like AWS's INI
+	// parser, the header extends to the last closing bracket on the line.
+	awsSectionBoundary = regexp.MustCompile(`^\s*\[[^\r\n]+\]`)
 	awsSectionHeader   = regexp.MustCompile(`^\s*\[\s*(\S+)(?:\s+(\S+))?\s*\]\s*$`)
 )
 
@@ -84,8 +85,8 @@ func splitAWSSections(text string) []awsSection {
 	key := ""
 
 	for _, line := range strings.SplitAfter(text, "\n") {
-		header := strings.TrimSuffix(line, "\n")
-		if awsSectionBoundary.MatchString(header) {
+		header := awsSectionBoundary.FindString(strings.TrimSuffix(line, "\n"))
+		if header != "" {
 			if offset > start {
 				sections = append(sections, awsSection{key: key, text: text[start:offset]})
 			}

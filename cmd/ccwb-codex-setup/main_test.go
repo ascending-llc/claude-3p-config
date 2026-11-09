@@ -26,7 +26,7 @@ func TestMergeAWSConfig(t *testing.T) {
 		"empty", "new-crlf", "other-profiles-lf", "other-profiles-crlf", "bom",
 		"outdated-ccwb", "only-sso-session", "only-profile", "already-current",
 		"current-with-bom", "duplicate-ccwb", "spaced-header", "case-sensitive", "no-final-newline",
-		"quoted-profile",
+		"quoted-profile", "inline-hash", "inline-semicolon",
 	}
 
 	for _, name := range tests {
@@ -76,6 +76,20 @@ func TestMergeAWSConfig(t *testing.T) {
 				for _, header := range []string{`[profile "my profile"]`, `[services "my services"]`, `[profile "team]dev"]`, "[profile work]"} {
 					if strings.Contains(old, header) {
 						t.Errorf("non-target section included in replaced text: %s", header)
+					}
+				}
+			}
+
+			if strings.HasPrefix(name, "inline-") {
+				for _, header := range []string{"[sso-session ccwb]", "[profile CCWB]"} {
+					if !strings.Contains(old, header) {
+						t.Errorf("commented target missing from replaced text: %s", header)
+					}
+				}
+
+				for _, header := range []string{`[profile "my profile#team;dev"]`, "[profile work]", `[services "team]dev"]`} {
+					if strings.Contains(old, header) {
+						t.Errorf("commented non-target section included in replaced text: %s", header)
 					}
 				}
 			}
@@ -132,6 +146,22 @@ func TestRun(t *testing.T) {
 		{
 			name: "replace with shared input", config: "config.json", input: "y\ny\n", existing: "outdated-ccwb.in", want: "outdated-ccwb.want", backup: true,
 			output: []string{"Replace them? [Y/n]", "https://old.example.com/start", "https://example.awsapps.com/start"},
+		},
+		{
+			name: "replace hash-commented sections", config: "config.json", input: "y\ny\n", existing: "inline-hash.in", want: "inline-hash.want", backup: true,
+			output: []string{"Replace them? [Y/n]"},
+		},
+		{
+			name: "replace semicolon-commented sections", config: "config.json", input: "y\ny\n", existing: "inline-semicolon.in", want: "inline-semicolon.want", backup: true,
+			output: []string{"Replace them? [Y/n]"},
+		},
+		{
+			name: "decline hash-commented sections", config: "config.json", input: "y\nn\n", existing: "inline-hash.in",
+			output: []string{"Replace them? [Y/n]", "unchanged"},
+		},
+		{
+			name: "decline semicolon-commented sections", config: "config.json", input: "y\nn\n", existing: "inline-semicolon.in",
+			output: []string{"Replace them? [Y/n]", "unchanged"},
 		},
 		{name: "decline replacement", config: "config.json", input: "y\nn\n", existing: "outdated-ccwb.in", output: []string{"Replace them? [Y/n]", "unchanged"}},
 		{name: "closed replacement input", config: "config.json", input: "y\n", existing: "outdated-ccwb.in", output: []string{"unchanged"}},
