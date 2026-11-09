@@ -1,0 +1,25 @@
+# Keep unrelated section headers and values.
+[sso-session ccwb]
+sso_start_url = https://example.awsapps.com/start
+sso_region = us-east-2
+sso_registration_scopes = sso:account:access
+
+[profile "my profile"]
+region = eu-west-1
+output = json
+
+[profile CCWB]
+sso_session = ccwb
+sso_account_id = 123456789012
+sso_role_name = ClaudeBedrockUser
+region = us-east-1
+
+[services "my services"]
+s3 =
+  endpoint_url = https://example.com
+
+[profile "team]dev"]
+region = ap-southeast-1
+
+[profile work]
+region = eu-central-1

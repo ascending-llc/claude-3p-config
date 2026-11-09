@@ -20,7 +20,11 @@ type awsSection struct {
 	text string
 }
 
-var awsSectionHeader = regexp.MustCompile(`^\s*\[\s*(\S+)(?:\s+(\S+))?\s*\]\s*$`)
+var (
+	// Recognize bracketed section names without limiting their word count.
+	awsSectionBoundary = regexp.MustCompile(`^\s*\[[^\r\n]+\]\s*$`)
+	awsSectionHeader   = regexp.MustCompile(`^\s*\[\s*(\S+)(?:\s+(\S+))?\s*\]\s*$`)
+)
 
 // mergeAWSConfig replaces only the two CCWB sections. The original bytes remain
 // available for the change check, including a BOM that must be removed.
@@ -80,14 +84,18 @@ func splitAWSSections(text string) []awsSection {
 	key := ""
 
 	for _, line := range strings.SplitAfter(text, "\n") {
-		match := awsSectionHeader.FindStringSubmatch(strings.TrimSuffix(line, "\n"))
-		if match != nil {
+		header := strings.TrimSuffix(line, "\n")
+		if awsSectionBoundary.MatchString(header) {
 			if offset > start {
 				sections = append(sections, awsSection{key: key, text: text[start:offset]})
 			}
 
 			start = offset
-			key = match[1] + " " + match[2]
+			key = ""
+
+			if match := awsSectionHeader.FindStringSubmatch(header); match != nil {
+				key = match[1] + " " + match[2]
+			}
 		}
 
 		offset += len(line)
@@ -219,6 +227,10 @@ func updateAWSConfig(path string, in *bufio.Scanner, out io.Writer, s policy.Cod
 		}
 	}
 
+	if err := ensureAWSConfigUnchanged(path, existing, exists); err != nil {
+		return err
+	}
+
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return fmt.Errorf("creating the AWS config folder: %s", err.Error())
 	}
@@ -237,6 +249,21 @@ func updateAWSConfig(path string, in *bufio.Scanner, out io.Writer, s policy.Cod
 	_, outputErr := fmt.Fprintln(out, `Updated .aws\config with the CCWB settings.`)
 
 	return outputErr
+}
+
+// ensureAWSConfigUnchanged rejects edits made since the initial read, before
+// creating a backup or writing settings. It does not lock out other processes.
+func ensureAWSConfigUnchanged(path string, original []byte, existed bool) error {
+	current, err := os.ReadFile(filepath.Clean(path))
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("checking the AWS config before writing: %s", err.Error())
+	}
+
+	if existed != (err == nil) || !bytes.Equal(current, original) {
+		return fmt.Errorf("%s changed while setup was running; no settings were written; run setup again", path)
+	}
+
+	return nil
 }
 
 func backupAWSConfig(path string, data []byte) error {

@@ -16,6 +16,8 @@ import (
 	"github.com/ascending-llc/claude-3p-config/policy"
 )
 
+type writeFunc func([]byte) (int, error)
+
 var update = flag.Bool("update", false, "rewrite testdata/awsconfig expected output")
 
 func TestMergeAWSConfig(t *testing.T) {
@@ -24,6 +26,7 @@ func TestMergeAWSConfig(t *testing.T) {
 		"empty", "new-crlf", "other-profiles-lf", "other-profiles-crlf", "bom",
 		"outdated-ccwb", "only-sso-session", "only-profile", "already-current",
 		"current-with-bom", "duplicate-ccwb", "spaced-header", "case-sensitive", "no-final-newline",
+		"quoted-profile",
 	}
 
 	for _, name := range tests {
@@ -67,6 +70,14 @@ func TestMergeAWSConfig(t *testing.T) {
 
 			if name == "outdated-ccwb" && (!strings.Contains(old, "https://old.example.com/start") || !strings.Contains(old, "region = us-west-2")) {
 				t.Errorf("old does not include both replaced sections: %q", old)
+			}
+
+			if name == "quoted-profile" {
+				for _, header := range []string{`[profile "my profile"]`, `[services "my services"]`, `[profile "team]dev"]`, "[profile work]"} {
+					if strings.Contains(old, header) {
+						t.Errorf("non-target section included in replaced text: %s", header)
+					}
+				}
 			}
 
 			again, _, changedAgain := mergeAWSConfig(got, snippet, newline)
@@ -182,6 +193,110 @@ func TestRun(t *testing.T) {
 			assertRunFiles(t, path, before, beforeTime, tt.want, tt.backup)
 		})
 	}
+}
+
+func TestRunPreservesChangesDuringConfirmation(t *testing.T) {
+	for _, removed := range []bool{false, true} {
+		name := "modified"
+		if removed {
+			name = "deleted"
+		}
+
+		t.Run(name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "config")
+			t.Setenv("AWS_CONFIG_FILE", path)
+
+			original := readFixture(t, "awsconfig/outdated-ccwb.in")
+			writeTestFile(t, path, original)
+
+			external := append(bytes.Clone(original), []byte("\n[profile added-elsewhere]\nregion = eu-west-1\n")...)
+			changed := false
+
+			var stdout, stderr bytes.Buffer
+
+			output := writeFunc(func(p []byte) (int, error) {
+				if !changed && bytes.Contains(p, []byte("Replace them?")) {
+					changed = true
+
+					if removed {
+						if err := os.Remove(path); err != nil {
+							t.Fatal(err)
+						}
+					} else {
+						writeTestFile(t, path, external)
+					}
+				}
+
+				return stdout.Write(p)
+			})
+
+			code := run(nil, readFixture(t, "config.json"), strings.NewReader("y\ny\n"), output, &stderr)
+			if !changed || code != 1 || !strings.Contains(stderr.String(), "changed") {
+				t.Fatalf("conflict not reported: changed=%t, exit=%d, stderr=%q", changed, code, stderr.String())
+			}
+
+			wantFiles := 0
+			if !removed {
+				wantFiles = 1
+
+				if got := readTestFile(t, path); !bytes.Equal(got, external) {
+					t.Errorf("external change overwritten: %q", got)
+				}
+			}
+
+			entries, err := os.ReadDir(filepath.Dir(path))
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if len(entries) != wantFiles {
+				t.Errorf("conflict created a config, backup or temporary file: %v", entries)
+			}
+		})
+	}
+}
+
+func TestEnsureAWSConfigUnchanged(t *testing.T) {
+	tests := []struct {
+		name     string
+		original string
+		current  string
+		existed  bool
+		exists   bool
+		wantErr  bool
+	}{
+		{name: "unchanged", original: "same", current: "same", existed: true, exists: true},
+		{name: "still absent"},
+		{name: "changed", original: "before", current: "after", existed: true, exists: true, wantErr: true},
+		{name: "deleted", original: "before", existed: true, wantErr: true},
+		{name: "created", current: "new", exists: true, wantErr: true},
+		{name: "empty file created", exists: true, wantErr: true},
+		{name: "empty file deleted", existed: true, wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "config")
+			if tt.exists {
+				writeTestFile(t, path, []byte(tt.current))
+			}
+
+			err := ensureAWSConfigUnchanged(path, []byte(tt.original), tt.existed)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("error=%v, want error=%t", err, tt.wantErr)
+			}
+		})
+	}
+
+	t.Run("read failure", func(t *testing.T) {
+		if err := ensureAWSConfigUnchanged(t.TempDir(), nil, false); err == nil {
+			t.Fatal("a directory was treated as an absent or unchanged file")
+		}
+	})
+}
+
+func (f writeFunc) Write(p []byte) (int, error) {
+	return f(p)
 }
 
 func TestRunFileErrors(t *testing.T) {
