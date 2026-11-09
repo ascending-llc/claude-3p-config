@@ -140,7 +140,7 @@ func TestRun(t *testing.T) {
 		},
 		{
 			name: "invalid config", config: "invalid-config.json", existing: "outdated-ccwb.in", code: 1, noQuestion: true,
-			errors: []string{"The settings built into this program are invalid:", "aws.account_id:", "codex.reasoning_effort:", "Ask your IT team for a correctly built copy."},
+			errors: []string{"The settings built into this program are invalid:\naws.account_id:", "\ncodex.reasoning_effort:", "\nAsk your IT team for a correctly built copy.\n"},
 		},
 		{
 			name: "argument rejected", config: "config.json", args: []string{"dropped.json"}, existing: "outdated-ccwb.in", code: 2, noQuestion: true,

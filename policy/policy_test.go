@@ -915,13 +915,13 @@ func TestParseCodexSetup(t *testing.T) {
 				}
 
 				lines := strings.Split(err.Error(), "\n")
-				if lines[0] != "invalid config:" || len(lines) != len(tt.wantErr)+1 {
+				if len(lines) != len(tt.wantErr) {
 					t.Fatalf("error = %q, want exactly %d validation errors", err.Error(), len(tt.wantErr))
 				}
 
 				for i, want := range tt.wantErr {
-					if !strings.HasPrefix(lines[i+1], want) {
-						t.Errorf("error %q does not start with %q", lines[i+1], want)
+					if !strings.HasPrefix(lines[i], want) {
+						t.Errorf("error %q does not start with %q", lines[i], want)
 					}
 				}
 

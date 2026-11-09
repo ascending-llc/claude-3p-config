@@ -194,6 +194,8 @@ func Parse(r io.Reader, opts Options) (Config, error) {
 // ParseCodexSetup decodes a whole config file strictly, like Parse, but validates
 // only aws and codex, reporting every invalid field at once. Other sections are
 // decoded but not validated. A missing codex section fails as "codex: is required".
+// A validation error has one path-qualified message per line and no heading, so
+// the caller can introduce it in its own words; a decoding error is a single line.
 func ParseCodexSetup(r io.Reader) (CodexSetup, error) {
 	cfg, err := decode(r)
 	if err != nil {
@@ -210,7 +212,7 @@ func ParseCodexSetup(r io.Reader) (CodexSetup, error) {
 	}
 
 	if len(v.errs) > 0 {
-		return CodexSetup{}, fmt.Errorf("invalid config:\n%s", errors.Join(v.errs...).Error())
+		return CodexSetup{}, errors.Join(v.errs...)
 	}
 
 	return CodexSetup{AWS: cfg.AWS, Codex: *cfg.Codex}, nil
