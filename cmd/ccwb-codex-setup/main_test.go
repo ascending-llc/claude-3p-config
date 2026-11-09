@@ -26,7 +26,7 @@ func TestMergeAWSConfig(t *testing.T) {
 		"empty", "new-crlf", "other-profiles-lf", "other-profiles-crlf", "bom",
 		"outdated-ccwb", "only-sso-session", "only-profile", "already-current",
 		"current-with-bom", "duplicate-ccwb", "spaced-header", "case-sensitive", "no-final-newline",
-		"quoted-profile", "inline-hash", "inline-semicolon",
+		"quoted-profile", "inline-hash", "inline-semicolon", "comments-between-sections",
 	}
 
 	for _, name := range tests {
@@ -90,6 +90,21 @@ func TestMergeAWSConfig(t *testing.T) {
 				for _, header := range []string{`[profile "my profile#team;dev"]`, "[profile work]", `[services "team]dev"]`} {
 					if strings.Contains(old, header) {
 						t.Errorf("commented non-target section included in replaced text: %s", header)
+					}
+				}
+			}
+
+			if name == "comments-between-sections" {
+				for _, comment := range []string{
+					"# Notes about the default profile", "# CCWB was set up by hand", "# Work account (prod) - do not delete",
+					"; Legacy profile, keep until 2027", "# Trailing note at the end of the file",
+				} {
+					if !strings.Contains(string(got), comment) {
+						t.Errorf("comment dropped: %s", comment)
+					}
+
+					if strings.Contains(old, comment) {
+						t.Errorf("comment reported as part of a replaced CCWB section: %s", comment)
 					}
 				}
 			}

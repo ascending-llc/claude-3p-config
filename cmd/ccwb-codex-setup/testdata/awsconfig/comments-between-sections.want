@@ -1,0 +1,25 @@
+# Notes about the default profile
+[default]
+region = eu-west-1
+
+# CCWB was set up by hand
+[profile CCWB]
+sso_session = ccwb
+sso_account_id = 123456789012
+sso_role_name = ClaudeBedrockUser
+region = us-east-1
+
+# Work account (prod) - do not delete
+[profile work]
+region = eu-west-2
+
+[sso-session ccwb]
+sso_start_url = https://example.awsapps.com/start
+sso_region = us-east-2
+sso_registration_scopes = sso:account:access
+
+; Legacy profile, keep until 2027
+[profile legacy]
+region = us-east-1
+
+# Trailing note at the end of the file

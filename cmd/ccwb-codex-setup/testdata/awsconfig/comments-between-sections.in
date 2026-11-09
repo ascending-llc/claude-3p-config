@@ -1,0 +1,22 @@
+# Notes about the default profile
+[default]
+region = eu-west-1
+
+# CCWB was set up by hand
+[profile CCWB]
+region = us-west-2
+
+# Work account (prod) - do not delete
+[profile work]
+region = eu-west-2
+
+[sso-session ccwb]
+sso_start_url = https://old.example.com/start
+; Legacy profile, keep until 2027
+[profile legacy]
+region = us-east-1
+
+[profile CCWB]
+region = ap-south-1
+
+# Trailing note at the end of the file

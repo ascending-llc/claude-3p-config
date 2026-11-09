@@ -77,22 +77,38 @@ func mergeAWSConfig(existing, snippet []byte, newline string) ([]byte, string, b
 }
 
 // splitAWSSections keeps each section's text, including comments and whitespace.
-// Text before the first header has an empty key.
+// Text before the first header has an empty key. Comments after a section's last
+// setting usually describe the next section, so each such block becomes its own
+// keyless section, which a merge never replaces or deletes.
 func splitAWSSections(text string) []awsSection {
 	var sections []awsSection
 
 	start, offset := 0, 0
-	key := ""
+	key, headed := "", false
+
+	add := func(end int) {
+		if end <= start {
+			return
+		}
+
+		body, comments := text[start:end], ""
+		if headed {
+			body, comments = splitTrailingComments(body)
+		}
+
+		sections = append(sections, awsSection{key: key, text: body})
+		if comments != "" {
+			sections = append(sections, awsSection{text: comments})
+		}
+	}
 
 	for _, line := range strings.SplitAfter(text, "\n") {
 		header := awsSectionBoundary.FindString(strings.TrimSuffix(line, "\n"))
 		if header != "" {
-			if offset > start {
-				sections = append(sections, awsSection{key: key, text: text[start:offset]})
-			}
+			add(offset)
 
 			start = offset
-			key = ""
+			key, headed = "", true
 
 			if match := awsSectionHeader.FindStringSubmatch(header); match != nil {
 				key = match[1] + " " + match[2]
@@ -102,11 +118,34 @@ func splitAWSSections(text string) []awsSection {
 		offset += len(line)
 	}
 
-	if start < len(text) {
-		sections = append(sections, awsSection{key: key, text: text[start:]})
-	}
+	add(len(text))
 
 	return sections
+}
+
+// splitTrailingComments splits off the comment lines after a section's last
+// setting, together with any blank lines among or after them. Blank lines before
+// the first such comment stay with the section. The header line is never split off.
+func splitTrailingComments(text string) (body, comments string) {
+	lines := strings.SplitAfter(text, "\n")
+	cut, offset := len(text), len(text)
+
+	for i := len(lines) - 1; i > 0; i-- {
+		offset -= len(lines[i])
+
+		trimmed := strings.TrimSpace(lines[i])
+		if trimmed == "" {
+			continue
+		}
+
+		if trimmed[0] != '#' && trimmed[0] != ';' {
+			break
+		}
+
+		cut = offset
+	}
+
+	return text[:cut], text[cut:]
 }
 
 func isCCWBSection(key string) bool {
