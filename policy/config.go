@@ -74,6 +74,12 @@ type (
 		ReasoningEffort string `json:"reasoning_effort"`
 	}
 
+	// CodexSetup is what ccwb-codex-setup writes on one machine.
+	CodexSetup struct {
+		AWS   AWS
+		Codex Codex
+	}
+
 	// MCPServer is a Jarvis Registry MCP endpoint reached over streamable HTTP.
 	MCPServer struct {
 		// Name is the connector name users see in Claude Desktop.
@@ -162,18 +168,9 @@ func Load(path string, opts Options) (Config, error) {
 // Parse decodes and validates a config. Unknown fields are rejected, and
 // every validation failure is reported, each prefixed with its field path.
 func Parse(r io.Reader, opts Options) (Config, error) {
-	var cfg Config
-
-	dec := json.NewDecoder(r)
-	dec.DisallowUnknownFields()
-
-	if err := dec.Decode(&cfg); err != nil {
-		return Config{}, fmt.Errorf("decoding config: %s", err.Error())
-	}
-
-	var trailing json.RawMessage
-	if err := dec.Decode(&trailing); err != io.EOF {
-		return Config{}, errors.New("decoding config: unexpected data after the JSON object")
+	cfg, err := decode(r)
+	if err != nil {
+		return Config{}, err
 	}
 
 	v := validator{allowPlaceholders: opts.AllowPlaceholders}
@@ -189,6 +186,51 @@ func Parse(r io.Reader, opts Options) (Config, error) {
 
 	if !slices.Contains(opts.Products, ProductCodex) {
 		cfg.Codex = nil
+	}
+
+	return cfg, nil
+}
+
+// ParseCodexSetup decodes a whole config file strictly, like Parse, but validates
+// only aws and codex, reporting every invalid field at once. Other sections are
+// decoded but not validated. A missing codex section fails as "codex: is required".
+// A validation error has one path-qualified message per line and no heading, so
+// the caller can introduce it in its own words; a decoding error is a single line.
+func ParseCodexSetup(r io.Reader) (CodexSetup, error) {
+	cfg, err := decode(r)
+	if err != nil {
+		return CodexSetup{}, err
+	}
+
+	v := validator{}
+	v.validateAWS(cfg.AWS)
+
+	if cfg.Codex == nil {
+		v.fail("codex", "is required")
+	} else {
+		v.validateCodex(*cfg.Codex)
+	}
+
+	if len(v.errs) > 0 {
+		return CodexSetup{}, errors.Join(v.errs...)
+	}
+
+	return CodexSetup{AWS: cfg.AWS, Codex: *cfg.Codex}, nil
+}
+
+func decode(r io.Reader) (Config, error) {
+	var cfg Config
+
+	dec := json.NewDecoder(r)
+	dec.DisallowUnknownFields()
+
+	if err := dec.Decode(&cfg); err != nil {
+		return Config{}, fmt.Errorf("decoding config: %s", err.Error())
+	}
+
+	var trailing json.RawMessage
+	if err := dec.Decode(&trailing); err != io.EOF {
+		return Config{}, errors.New("decoding config: unexpected data after the JSON object")
 	}
 
 	return cfg, nil

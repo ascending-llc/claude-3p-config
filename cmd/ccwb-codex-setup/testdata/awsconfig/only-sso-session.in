@@ -1,0 +1,2 @@
+[sso-session ccwb]
+sso_start_url = https://old.example.com/start

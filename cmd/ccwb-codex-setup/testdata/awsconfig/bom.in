@@ -1,0 +1,6 @@
+﻿# Keep this comment and spacing.
+[default]
+region = eu-west-1
+
+[profile work]
+  region = eu-west-2

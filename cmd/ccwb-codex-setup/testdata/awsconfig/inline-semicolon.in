@@ -1,0 +1,17 @@
+# Keep comments and unrelated profiles intact.
+[sso-session ccwb] ; old sign-in settings
+sso_start_url = https://old.example.com/start
+
+[profile "my profile#team;dev"]  ; unrelated [notes]
+region = eu-west-1
+output = json
+
+[profile CCWB]; old profile settings
+region = us-west-2
+
+[profile work] ; deployment
+region = eu-central-1
+
+[services "team]dev"] ; keep ] in this comment
+s3 =
+  endpoint_url = https://example.com

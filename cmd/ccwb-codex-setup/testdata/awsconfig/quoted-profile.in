@@ -1,0 +1,20 @@
+# Keep unrelated section headers and values.
+[sso-session ccwb]
+sso_start_url = https://old.example.com/start
+
+[profile "my profile"]
+region = eu-west-1
+output = json
+
+[profile CCWB]
+region = us-west-2
+
+[services "my services"]
+s3 =
+  endpoint_url = https://example.com
+
+[profile "team]dev"]
+region = ap-southeast-1
+
+[profile work]
+region = eu-central-1

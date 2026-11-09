@@ -861,3 +861,178 @@ func mustRender(t *testing.T, path string) Artifacts {
 
 	return artifacts
 }
+
+func TestParseCodexSetup(t *testing.T) {
+	tests := []struct {
+		mutate  func(*Config)
+		name    string
+		wantErr []string
+	}{
+		{name: "full config"},
+		{name: "invalid claude ignored", mutate: func(c *Config) { c.Claude.Models = nil }},
+		{name: "invalid macos profile ignored", mutate: func(c *Config) { c.MacOSProfile = MacOSProfile{} }},
+		{name: "missing codex", mutate: func(c *Config) { c.Codex = nil }, wantErr: []string{"codex: is required"}},
+		{name: "AWS placeholder", mutate: func(c *Config) { c.AWS.AccountID = "REPLACE_WITH_ACCOUNT_ID" }, wantErr: []string{"aws.account_id: replace the placeholder"}},
+		{name: "Codex placeholder", mutate: func(c *Config) { c.Codex.DefaultModel = "REPLACE_WITH_MODEL" }, wantErr: []string{"codex.default_model: replace the placeholder"}},
+		{
+			name: "multiple errors",
+			mutate: func(c *Config) {
+				c.AWS.AccountID = "bad"
+				c.Codex.ReasoningEffort = "bad"
+			},
+			wantErr: []string{"aws.account_id:", "codex.reasoning_effort:"},
+		},
+		{
+			name: "missing codex joins AWS errors",
+			mutate: func(c *Config) {
+				c.AWS.AccountID = "bad"
+				c.Codex = nil
+			},
+			wantErr: []string{"aws.account_id:", "codex: is required"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg, err := Load(validConfig, Options{Products: []Product{ProductClaude, ProductCodex}})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if tt.mutate != nil {
+				tt.mutate(&cfg)
+			}
+
+			raw, err := json.Marshal(cfg)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			got, err := ParseCodexSetup(bytes.NewReader(raw))
+			if len(tt.wantErr) > 0 {
+				if err == nil {
+					t.Fatal("ParseCodexSetup succeeded, want an error")
+				}
+
+				lines := strings.Split(err.Error(), "\n")
+				if len(lines) != len(tt.wantErr) {
+					t.Fatalf("error = %q, want exactly %d validation errors", err.Error(), len(tt.wantErr))
+				}
+
+				for i, want := range tt.wantErr {
+					if !strings.HasPrefix(lines[i], want) {
+						t.Errorf("error %q does not start with %q", lines[i], want)
+					}
+				}
+
+				if cfg.Codex == nil && lines[len(lines)-1] != "codex: is required" {
+					t.Errorf("missing section error = %q", lines[len(lines)-1])
+				}
+
+				return
+			}
+
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if got.AWS != cfg.AWS || got.Codex != *cfg.Codex {
+				t.Errorf("parsed setup = %+v, want original AWS and Codex values", got)
+			}
+		})
+	}
+}
+
+func TestParseCodexSetupSections(t *testing.T) {
+	raw, err := os.ReadFile(validConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var sections map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &sections); err != nil {
+		t.Fatal(err)
+	}
+
+	delete(sections, "macos_profile")
+	delete(sections, "claude")
+
+	for _, invalidClaude := range []bool{false, true} {
+		if invalidClaude {
+			sections["claude"] = json.RawMessage(`{"models": {}, "default_tier": "invalid"}`)
+		}
+
+		onlyNeeded, err := json.Marshal(sections)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := ParseCodexSetup(bytes.NewReader(onlyNeeded)); err != nil {
+			t.Fatalf("config without macos_profile rejected: %s", err.Error())
+		}
+	}
+}
+
+func TestParseCodexSetupStrictDecoding(t *testing.T) {
+	raw, err := os.ReadFile(validConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	valid := string(raw)
+	tests := []struct {
+		name    string
+		input   string
+		wantErr string
+	}{
+		{name: "top level unknown", input: strings.Replace(valid, `{`, `{"extra": true,`, 1), wantErr: `unknown field "extra"`},
+		{name: "AWS unknown", input: strings.Replace(valid, `"aws": {`, `"aws": {"extra": true,`, 1), wantErr: `unknown field "extra"`},
+		{name: "Codex unknown", input: strings.Replace(valid, `"codex": {`, `"codex": {"extra": true,`, 1), wantErr: `unknown field "extra"`},
+		{name: "ignored Claude unknown", input: strings.Replace(valid, `"claude": {`, `"claude": {"extra": true,`, 1), wantErr: `unknown field "extra"`},
+		{name: "ignored macos unknown", input: strings.Replace(valid, `"macos_profile": {`, `"macos_profile": {"extra": true,`, 1), wantErr: `unknown field "extra"`},
+		{name: "ignored nested model unknown", input: strings.Replace(valid, `"anthropic_model_id"`, `"anthropic_model"`, 1), wantErr: `unknown field "anthropic_model"`},
+		{name: "ignored field wrong type", input: strings.Replace(valid, `"organization": "Example"`, `"organization": 123`, 1), wantErr: "cannot unmarshal number"},
+		{name: "empty input", wantErr: "EOF"},
+		{name: "second object", input: valid + `{}`, wantErr: "unexpected data after the JSON object"},
+		{name: "trailing garbage", input: valid + `!`, wantErr: "unexpected data after the JSON object"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.input == valid {
+				t.Fatal("test input was not modified; the fixture changed")
+			}
+
+			_, err := ParseCodexSetup(strings.NewReader(tt.input))
+			if err == nil || !strings.HasPrefix(err.Error(), "decoding config:") || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("got %v, want a decoding error containing %q", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestCodexSetupRenderMatchesGolden(t *testing.T) {
+	raw, err := os.ReadFile(validConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	setup, err := ParseCodexSetup(bytes.NewReader(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for name, got := range map[string][]byte{
+		"aws-config-CCWB.ini":          setup.AWSConfig(),
+		"codex-requirements-CCWB.toml": setup.Requirements(),
+	} {
+		want, err := os.ReadFile(filepath.Join("testdata", "golden", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if !bytes.Equal(got, want) {
+			t.Errorf("%s differs from the generator golden", name)
+		}
+	}
+}

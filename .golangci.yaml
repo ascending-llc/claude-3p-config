@@ -80,7 +80,7 @@ linters:
   exclusions:
     generated: lax
     rules:
-      - path: '^(policy/policy|cmd/ccwb-policy/main)_test\.go$'
+      - path: '^(policy/policy|cmd/ccwb-policy/main|cmd/ccwb-codex-setup/main)_test\.go$'
         linters:
           - gosec
         # Reads golden files, testdata fixtures, committed examples and t.TempDir() outputs by fixed names, not untrusted input.
