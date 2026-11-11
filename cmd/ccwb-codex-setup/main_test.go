@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"errors"
 	"flag"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -212,8 +214,20 @@ func TestRun(t *testing.T) {
 			}
 
 			var stdout, stderr bytes.Buffer
-			if code := run(tt.args, cfg, strings.NewReader(tt.input), &stdout, &stderr); code != tt.code {
+
+			finished := false
+			finish := func(_ *bufio.Scanner, _, _ io.Writer, _ policy.CodexSetup) int {
+				finished = true
+
+				return 0
+			}
+
+			if code := run(tt.args, cfg, strings.NewReader(tt.input), &stdout, &stderr, finish); code != tt.code {
 				t.Fatalf("exit = %d, want %d; stdout: %s; stderr: %s", code, tt.code, stdout.String(), stderr.String())
+			}
+
+			if finished != (tt.code == 0) {
+				t.Errorf("finish called = %t for exit %d", finished, tt.code)
 			}
 
 			assertContains(t, stdout.String(), tt.output)
@@ -237,6 +251,70 @@ func TestRun(t *testing.T) {
 
 			assertRunFiles(t, path, before, beforeTime, tt.want, tt.backup)
 		})
+	}
+}
+
+func TestRunSharesFinishInput(t *testing.T) {
+	for _, tt := range []struct {
+		name     string
+		existing string
+		input    string
+		want     string
+		code     int
+	}{
+		{name: "new config", input: "y\nnext\n", want: "empty.want"},
+		{name: "replace", existing: "outdated-ccwb.in", input: "y\ny\nnext\n", want: "outdated-ccwb.want", code: 3},
+		{name: "keep", existing: "outdated-ccwb.in", input: "y\nn\nnext\n", want: "outdated-ccwb.in", code: 1},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "config")
+			t.Setenv("AWS_CONFIG_FILE", path)
+
+			if tt.existing != "" {
+				writeTestFile(t, path, readFixture(t, "awsconfig/"+tt.existing))
+			}
+
+			var stdout, stderr bytes.Buffer
+
+			called := false
+			finish := func(in *bufio.Scanner, out, errs io.Writer, s policy.CodexSetup) int {
+				called = true
+
+				if !in.Scan() || in.Text() != "next" {
+					t.Errorf("finish did not receive the next buffered input line: %q, %v", in.Text(), in.Err())
+				}
+
+				if out != &stdout || errs != &stderr || s != setupFixture(t) {
+					t.Error("finish did not receive the output streams and parsed settings")
+				}
+
+				want := readFixture(t, "awsconfig/"+tt.want)
+				if tt.existing == "" && runtime.GOOS == "windows" {
+					want = bytes.ReplaceAll(want, []byte("\n"), []byte("\r\n"))
+				}
+
+				if !bytes.Equal(readTestFile(t, path), want) {
+					t.Error("finish ran before the AWS config step completed")
+				}
+
+				return tt.code
+			}
+
+			code := run(nil, readFixture(t, "config.json"), strings.NewReader(tt.input), &stdout, &stderr, finish)
+			if !called || code != tt.code {
+				t.Fatalf("finish called=%t, exit=%d, want %d; stderr=%s", called, code, tt.code, stderr.String())
+			}
+		})
+	}
+}
+
+func unexpectedFinish(t *testing.T) func(*bufio.Scanner, io.Writer, io.Writer, policy.CodexSetup) int {
+	t.Helper()
+
+	return func(_ *bufio.Scanner, _, _ io.Writer, _ policy.CodexSetup) int {
+		t.Fatal("finish called after an earlier step failed")
+
+		return 0
 	}
 }
 
@@ -275,7 +353,7 @@ func TestRunPreservesChangesDuringConfirmation(t *testing.T) {
 				return stdout.Write(p)
 			})
 
-			code := run(nil, readFixture(t, "config.json"), strings.NewReader("y\ny\n"), output, &stderr)
+			code := run(nil, readFixture(t, "config.json"), strings.NewReader("y\ny\n"), output, &stderr, unexpectedFinish(t))
 			if !changed || code != 1 || !strings.Contains(stderr.String(), "changed") {
 				t.Fatalf("conflict not reported: changed=%t, exit=%d, stderr=%q", changed, code, stderr.String())
 			}
@@ -357,7 +435,7 @@ func TestRunFileErrors(t *testing.T) {
 			t.Setenv("AWS_CONFIG_FILE", path)
 
 			var stdout, stderr bytes.Buffer
-			if code := run(nil, readFixture(t, "config.json"), strings.NewReader("y\n"), &stdout, &stderr); code != 1 || stderr.Len() == 0 {
+			if code := run(nil, readFixture(t, "config.json"), strings.NewReader("y\n"), &stdout, &stderr, unexpectedFinish(t)); code != 1 || stderr.Len() == 0 {
 				t.Fatalf("file failure: exit=%d, stderr=%q", code, stderr.String())
 			}
 		})
@@ -371,7 +449,7 @@ func TestRunInputError(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 
 	inputErr := errors.New("cannot read confirmation")
-	if code := run(nil, readFixture(t, "config.json"), iotest.ErrReader(inputErr), &stdout, &stderr); code != 1 {
+	if code := run(nil, readFixture(t, "config.json"), iotest.ErrReader(inputErr), &stdout, &stderr, unexpectedFinish(t)); code != 1 {
 		t.Fatalf("exit = %d, want 1", code)
 	}
 

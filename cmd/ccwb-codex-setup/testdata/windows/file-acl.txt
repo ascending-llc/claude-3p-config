@@ -1,0 +1,5 @@
+owner=S-1-5-32-544
+protected=False
+rule=S-1-5-18 Allow 2032127 inh=None inherited=True
+rule=S-1-5-32-544 Allow 2032127 inh=None inherited=True
+rule=S-1-5-32-545 Allow 1179817 inh=None inherited=True
