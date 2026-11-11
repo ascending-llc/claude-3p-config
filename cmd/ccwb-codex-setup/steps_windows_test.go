@@ -76,8 +76,8 @@ func TestPrepareCurrentRequirements(t *testing.T) {
 	t.Setenv("ProgramData", t.TempDir())
 
 	setup := setupFixture(t)
-	if code := installRequirements(setup); code != 0 {
-		t.Fatalf("install returned %d", code)
+	if code, installErr := installRequirements(setup); code != 0 || installErr != nil {
+		t.Fatalf("install returned %d: %v", code, installErr)
 	}
 
 	in := bufio.NewScanner(strings.NewReader("next\n"))
@@ -117,8 +117,8 @@ func TestRequirementsRepairsFilePermissions(t *testing.T) {
 			t.Setenv("ProgramData", t.TempDir())
 
 			setup := setupFixture(t)
-			if code := installRequirements(setup); code != 0 {
-				t.Fatalf("initial install returned %d", code)
+			if code, installErr := installRequirements(setup); code != 0 || installErr != nil {
+				t.Fatalf("initial install returned %d: %v", code, installErr)
 			}
 
 			path, err := requirementsPath()
@@ -157,8 +157,8 @@ func TestRequirementsRepairsFilePermissions(t *testing.T) {
 				t.Errorf("permission repair consumed confirmation input: %q", in.Text())
 			}
 
-			if code := installRequirements(setup); code != 0 {
-				t.Fatalf("file permission repair returned %d", code)
+			if code, installErr := installRequirements(setup); code != 0 || installErr != nil {
+				t.Fatalf("file permission repair returned %d: %v", code, installErr)
 			}
 
 			assertRequirementsLocked(t, filepath.Dir(path))

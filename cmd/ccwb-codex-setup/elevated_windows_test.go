@@ -9,13 +9,58 @@ import (
 	"testing"
 )
 
+func TestPowerShellCommandEnvironment(t *testing.T) {
+	for _, name := range []string{"PSModulePath", "psmodulepath", "PSMODULEPATH"} {
+		t.Run(name, func(t *testing.T) {
+			t.Setenv(name, "inherited modules")
+			t.Setenv("CCWB_POWERSHELL_TEST", "preserved")
+
+			cmd := powershellCommand("exit 0")
+
+			preserved := false
+			for _, entry := range cmd.Environ() {
+				key, value, _ := strings.Cut(entry, "=")
+				if strings.EqualFold(key, "PSModulePath") {
+					t.Error("Windows PowerShell inherited PSModulePath")
+				}
+
+				if key == "CCWB_POWERSHELL_TEST" && value == "preserved" {
+					preserved = true
+				}
+			}
+
+			if !preserved {
+				t.Error("unrelated environment variable was not preserved")
+			}
+
+			if os.Getenv(name) != "inherited modules" {
+				t.Error("the parent process environment was changed")
+			}
+		})
+	}
+}
+
+func TestReadACLIgnoresInheritedModulePath(t *testing.T) {
+	// Without the default module paths, Windows PowerShell cannot load Get-Acl.
+	t.Setenv("PSModulePath", t.TempDir())
+	dir := t.TempDir()
+	path := filepath.Join(dir, "requirements.toml")
+	writeTestFile(t, path, []byte("settings\n"))
+
+	for _, target := range []string{dir, path} {
+		if _, err := readACL(target); err != nil {
+			t.Errorf("readACL(%q): %v", target, err)
+		}
+	}
+}
+
 func TestInstallRequirements(t *testing.T) {
 	requireElevatedWindows(t)
 	t.Setenv("ProgramData", t.TempDir())
 
 	setup := setupFixture(t)
-	if code := installRequirements(setup); code != 0 {
-		t.Fatalf("initial install returned %d", code)
+	if code, installErr := installRequirements(setup); code != 0 || installErr != nil {
+		t.Fatalf("initial install returned %d: %v", code, installErr)
 	}
 
 	path, err := requirementsPath()
@@ -31,8 +76,8 @@ func TestInstallRequirements(t *testing.T) {
 	assertRequirementsLocked(t, filepath.Dir(path))
 
 	setup.Codex.ReasoningEffort = "low"
-	if code := installRequirements(setup); code != 0 {
-		t.Fatalf("replacement returned %d", code)
+	if code, installErr := installRequirements(setup); code != 0 || installErr != nil {
+		t.Fatalf("replacement returned %d: %v", code, installErr)
 	}
 
 	if got := readTestFile(t, path); !bytes.Equal(got, setup.Requirements()) {
@@ -53,6 +98,48 @@ func TestInstallRequirements(t *testing.T) {
 	}
 
 	assertRequirementsLocked(t, filepath.Dir(path))
+}
+
+func TestLockRequirementsFolderWithInheritedPermissions(t *testing.T) {
+	requireElevatedWindows(t)
+	parent := t.TempDir()
+
+	if err := runICACLS(parent, "/grant:r", "*"+systemSID+":(OI)(CI)F", "*"+administratorSID+":(OI)(CI)F", "*"+usersSID+":(OI)(CI)RX"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := runICACLS(parent, "/inheritance:r"); err != nil {
+		t.Fatal(err)
+	}
+
+	dir := filepath.Join(parent, "Codex")
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	acl, err := readACL(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if acl.protected || len(acl.rules) == 0 {
+		t.Fatalf("expected inherited permissions before locking: %+v", acl)
+	}
+
+	for _, rule := range acl.rules {
+		if !rule.inherited {
+			t.Fatalf("expected only inherited rules before locking: %+v", acl)
+		}
+	}
+
+	if lockErr := lockRequirementsFolder(dir); lockErr != nil {
+		t.Fatal(lockErr)
+	}
+
+	acl, err = readACL(dir)
+	if err != nil || !acl.directoryLocked() {
+		t.Fatalf("folder was not locked: %+v, %v", acl, err)
+	}
 }
 
 func TestRequirementsRepairsExtraGrant(t *testing.T) {
@@ -82,8 +169,8 @@ func TestRequirementsRepairsExtraGrant(t *testing.T) {
 		t.Fatal("folder with an extra Everyone grant was reported as locked")
 	}
 
-	if code := installRequirements(setupFixture(t)); code != 0 {
-		t.Fatalf("repair returned %d", code)
+	if code, installErr := installRequirements(setupFixture(t)); code != 0 || installErr != nil {
+		t.Fatalf("repair returned %d: %v", code, installErr)
 	}
 
 	assertRequirementsLocked(t, dir)

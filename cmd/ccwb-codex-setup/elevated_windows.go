@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/ascending-llc/claude-3p-config/policy"
@@ -41,7 +42,11 @@ func runElevated(args []string, cfg []byte) int {
 	}
 
 	if steps.requirements {
-		fileCode := installRequirements(s)
+		fileCode, fileErr := installRequirements(s)
+		if fileErr != nil {
+			_, _ = fmt.Fprintln(os.Stderr, fileErr)
+		}
+
 		if code == 0 {
 			code = fileCode
 		}
@@ -59,6 +64,22 @@ func requirementsPath() (string, error) {
 	return filepath.Join(base, "OpenAI", "Codex", "requirements.toml"), nil
 }
 
+func powershellCommand(script string) *exec.Cmd {
+	cmd := exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script)
+
+	// PowerShell 7 can pass its module paths through Go to Windows PowerShell
+	// 5.1, whose built-in cmdlets then fail to load. Let it rebuild its defaults.
+	cmd.Env = make([]string, 0, len(os.Environ()))
+	for _, entry := range os.Environ() {
+		name, _, _ := strings.Cut(entry, "=")
+		if !strings.EqualFold(name, "PSModulePath") {
+			cmd.Env = append(cmd.Env, entry)
+		}
+	}
+
+	return cmd
+}
+
 func readACL(path string) (pathACL, error) {
 	script := `$ErrorActionPreference = 'Stop'; $acl = Get-Acl -LiteralPath ` + powershellQuote(path) + `;
 'owner=' + $acl.GetOwner([Security.Principal.SecurityIdentifier]).Value;
@@ -67,12 +88,23 @@ foreach ($r in $acl.GetAccessRules($true, $true, [Security.Principal.SecurityIde
   'rule={0} {1} {2} inh={3} inherited={4}' -f $r.IdentityReference.Value, $r.AccessControlType, [int]$r.FileSystemRights, $r.InheritanceFlags, $r.IsInherited
 }`
 
-	output, err := exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script).Output()
+	cmd := powershellCommand(script)
+
+	var stderr bytes.Buffer
+
+	cmd.Stderr = &stderr
+
+	output, err := cmd.Output()
 	if err != nil {
-		return pathACL{}, fmt.Errorf("reading permissions for %s: %s", path, err.Error())
+		return pathACL{}, fmt.Errorf("reading permissions for %s: %s: %s", path, err.Error(), strings.TrimSpace(stderr.String()))
 	}
 
-	return parseACL(output)
+	acl, err := parseACL(output)
+	if err != nil {
+		return pathACL{}, fmt.Errorf("parsing permissions for %s: %s: %s", path, err.Error(), strings.TrimSpace(string(output)))
+	}
+
+	return acl, nil
 }
 
 func installAWSCLI() int {
@@ -92,7 +124,7 @@ func installAWSCLI() int {
 $s.Status;
 if ($null -ne $s.SignerCertificate) { $s.SignerCertificate.SubjectName.Format($true) }`
 
-	output, err := exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script).Output()
+	output, err := powershellCommand(script).Output()
 	if err != nil || !validAWSSignature(output) {
 		return exitSignature
 	}
@@ -138,53 +170,63 @@ func downloadAWSCLI(path string) error {
 	return file.Close()
 }
 
-func installRequirements(s policy.CodexSetup) int {
+func installRequirements(s policy.CodexSetup) (int, error) {
 	path, err := requirementsPath()
 	if err != nil {
-		return exitPermissions
+		return exitPermissions, err
 	}
 
 	dir := filepath.Dir(path)
 	if mkdirErr := os.MkdirAll(dir, 0o700); mkdirErr != nil {
-		return exitPermissions
+		return exitPermissions, mkdirErr
 	}
 
 	if lockErr := lockRequirementsFolder(dir); lockErr != nil {
-		return exitPermissions
+		return exitPermissions, lockErr
 	}
 
 	existing, err := os.ReadFile(filepath.Clean(path))
 	if err != nil && !os.IsNotExist(err) {
-		return exitWrite
+		return exitWrite, err
 	}
 
 	if err == nil {
 		backup := path + ".bak-" + time.Now().Format("20060102-150405")
 		if backupErr := backupRequirements(backup, existing); backupErr != nil {
-			return exitWrite
+			return exitWrite, backupErr
 		}
 	}
 
 	if writeErr := writeRequirements(path, s.Requirements()); writeErr != nil {
-		return exitWrite
+		return exitWrite, writeErr
 	}
 
 	// Ownership also grants permission to change the file's ACL. The replacement
 	// inherits the locked directory's rules, but must have a trusted owner too.
 	if ownerErr := runICACLS(path, "/setowner", "*"+administratorSID); ownerErr != nil {
-		return exitPermissions
+		return exitPermissions, ownerErr
 	}
 
 	acl, err := readACL(path)
-	if err != nil || !acl.fileLocked() {
-		return exitPermissions
+	if err != nil {
+		return exitPermissions, err
 	}
 
-	return 0
+	if !acl.fileLocked() {
+		return exitPermissions, fmt.Errorf("the Codex settings file permissions do not match the required lock: %+v", acl)
+	}
+
+	return 0, nil
 }
 
 func lockRequirementsFolder(dir string) error {
 	if err := runICACLS(dir, "/setowner", "*"+administratorSID); err != nil {
+		return err
+	}
+
+	// Establish explicit access before removing any existing or inherited
+	// grants. Fresh directories may have only inherited permissions.
+	if err := runICACLS(dir, "/grant:r", "*"+systemSID+":(OI)(CI)F", "*"+administratorSID+":(OI)(CI)F", "*"+usersSID+":(OI)(CI)RX"); err != nil {
 		return err
 	}
 
@@ -218,7 +260,7 @@ func lockRequirementsFolder(dir string) error {
 		removed[key] = true
 	}
 
-	if commandErr := runICACLS(dir, "/inheritance:r", "/grant:r", "*"+systemSID+":(OI)(CI)F", "*"+administratorSID+":(OI)(CI)F", "*"+usersSID+":(OI)(CI)RX"); commandErr != nil {
+	if commandErr := runICACLS(dir, "/inheritance:r"); commandErr != nil {
 		return commandErr
 	}
 
@@ -228,14 +270,19 @@ func lockRequirementsFolder(dir string) error {
 	}
 
 	if !acl.directoryLocked() {
-		return fmt.Errorf("the Codex folder permissions do not match the required lock")
+		return fmt.Errorf("the Codex folder permissions do not match the required lock: %+v", acl)
 	}
 
 	return nil
 }
 
 func runICACLS(path string, args ...string) error {
-	return exec.Command("icacls", append([]string{path}, args...)...).Run()
+	output, err := exec.Command("icacls", append([]string{path}, args...)...).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("icacls %q %v: %s: %s", path, args, err.Error(), strings.TrimSpace(string(output)))
+	}
+
+	return nil
 }
 
 func backupRequirements(path string, data []byte) error {

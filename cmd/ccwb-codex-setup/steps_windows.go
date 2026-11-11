@@ -213,7 +213,7 @@ func startElevated(steps installSteps) (int, error) {
 		return 0, fmt.Errorf("finding this setup program: %s", err.Error())
 	}
 
-	err = exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-Command", elevationScript(exe, steps)).Run()
+	err = powershellCommand(elevationScript(exe, steps)).Run()
 	if err == nil {
 		return 0, nil
 	}
