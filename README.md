@@ -1,6 +1,6 @@
 # Claude and Codex on Amazon Bedrock, configuration only
 
-This repository sets up **Claude Desktop**, the **Claude Code CLI**, and local **Codex/ChatGPT Work** clients selected on the command line to use models on Amazon Bedrock in your own AWS account. People sign in through **AWS IAM Identity Center**, which can federate to Entra ID or another identity provider. Nothing is installed except configuration:
+This repository sets up **Claude Desktop**, the **Claude Code CLI**, and local **Codex/ChatGPT Work** clients selected on the command line to use models on Amazon Bedrock in your own AWS account. People sign in through **AWS IAM Identity Center**, which can federate to Entra ID or another identity provider. The generator produces these configuration files:
 
 | Piece | What it does |
 | --- | --- |
@@ -11,7 +11,9 @@ This repository sets up **Claude Desktop**, the **Claude Code CLI**, and local *
 
 The generator `ccwb-policy` renders the selected products from one `config/config.json`. Choose `claude` for Claude Desktop and Claude Code, `codex` for Codex, or both.
 
-The status below records historical validation. See the [test plan](docs/test-plan.md#results) for AS-1975 results and remaining checks.
+For Codex on Windows, each client's IT admin can also build `ccwb-codex-setup.exe` with their configuration built in. Employees double-click it to write the AWS profile and Codex requirements; it installs AWS CLI v2 if missing. The repository ships source, not prebuilt binaries.
+
+The status below records historical validation. See the [test plan](docs/test-plan.md#results) for recorded results and remaining checks, including the Windows setup program.
 
 | Platform | Output | Status |
 | --- | --- | --- |
@@ -38,23 +40,26 @@ The config groups shared settings under `aws` and `macos_profile`, and product s
 For implementation testing, follow the location-specific limits in the test plan before installing policies or signing in. Then follow the guide for your platform.
 
 - [Admin guide](docs/admin-guide.md): AWS prerequisites, the config fields, generating and distributing the policies
+- [Codex setup program](docs/codex-setup-guide.md): build `ccwb-codex-setup.exe` with your config built in, so Windows users set up Codex by double-clicking it
 - [macOS user guide](docs/macos-user-guide.md): install and sign in on a Mac
 - [Windows user guide](docs/windows-user-guide.md): install and sign in on Windows
 - [Test plan](docs/test-plan.md): what was tested, and the checklist for new platforms or changes
 
 Without Go, copy the committed examples in [`examples/`](examples/) and replace each `REPLACE_WITH_` value by hand. The examples are rendered from [`config/config.example.json`](config/config.example.json).
 
-`config/config.json` and `dist/` are git-ignored. They hold your account ID, AIP ARNs and sign-in URL, which aren't secrets but are internal, so share them through a private channel.
+`config/config.json` and `dist/` are git-ignored. They hold your account ID, AIP ARNs and sign-in URL, which aren't secrets but are internal, so share them through a private channel. `dist/ccwb-codex-setup.exe` embeds `config/config.json` and must be handled the same way.
 
 ## Repository layout
 
 ```
-cmd/ccwb-policy/      command-line entry point
+cmd/ccwb-policy/       command-line entry point
+cmd/ccwb-codex-setup/  Windows setup program for Codex, built by the admin
 policy/               config validation and rendering of Claude, Codex and AWS artifacts
 internal/plist/       XML property list encoder for the .mobileconfig
-config/               config.example.json (committed) and config.json (yours, ignored)
+config/               config.example.json and your ignored config.json; embed.go embeds it in ccwb-codex-setup
 examples/             artifacts rendered from config.example.json
 docs/                 admin guide, user guides, test plan
+signing/              jsign container for signing the setup program with a cloud key
 ```
 
 ## Development

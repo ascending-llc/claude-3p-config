@@ -18,7 +18,12 @@ import (
 )
 
 func main() {
-	code := run(os.Args[1:], config.JSON(), os.Stdin, os.Stdout, os.Stderr)
+	args, cfg := os.Args[1:], config.JSON()
+	if runtime.GOOS == "windows" && len(args) > 0 && args[0] == "-elevated" {
+		os.Exit(runElevated(args, cfg))
+	}
+
+	code := run(args, cfg, os.Stdin, os.Stdout, os.Stderr, finishSteps)
 	if runtime.GOOS == "windows" {
 		_, _ = fmt.Fprintln(os.Stdout, "Press Enter to close.")
 		_, _ = bufio.NewReader(os.Stdin).ReadString('\n')
@@ -27,7 +32,9 @@ func main() {
 	os.Exit(code)
 }
 
-func run(args []string, cfg []byte, stdin io.Reader, stdout, stderr io.Writer) int {
+func run(args []string, cfg []byte, stdin io.Reader, stdout, stderr io.Writer,
+	finish func(in *bufio.Scanner, stdout, stderr io.Writer, s policy.CodexSetup) int,
+) int {
 	info, _ := debug.ReadBuildInfo()
 	_, _ = fmt.Fprintf(stdout, "ccwb-codex-setup %s: set up Codex on Amazon Bedrock (CCWB profile)\n", revision(info))
 
@@ -90,7 +97,7 @@ Codex reasoning effort: %s
 		return 1
 	}
 
-	return 0
+	return finish(in, stdout, stderr, s)
 }
 
 func revision(info *debug.BuildInfo) string {

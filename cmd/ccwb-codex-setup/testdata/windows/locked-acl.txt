@@ -1,0 +1,5 @@
+owner=S-1-5-32-544
+protected=True
+rule=S-1-5-18 Allow 2032127 inh=ContainerInherit, ObjectInherit inherited=False
+rule=S-1-5-32-544 Allow 2032127 inh=ContainerInherit, ObjectInherit inherited=False
+rule=S-1-5-32-545 Allow 1179817 inh=ContainerInherit, ObjectInherit inherited=False

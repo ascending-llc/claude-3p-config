@@ -1,0 +1,6 @@
+Valid
+CN=Amazon Web Services, Inc.
+O="Amazon Web Services, Inc."
+L=Seattle
+S=Washington
+C=US

@@ -80,11 +80,16 @@ linters:
   exclusions:
     generated: lax
     rules:
-      - path: '^(policy/policy|cmd/ccwb-policy/main|cmd/ccwb-codex-setup/main)_test\.go$'
+      - path: '^(policy/policy|cmd/ccwb-policy/main|cmd/ccwb-codex-setup/(main|elevated_windows))_test\.go$'
         linters:
           - gosec
         # Reads golden files, testdata fixtures, committed examples and t.TempDir() outputs by fixed names, not untrusted input.
         text: 'G304: Potential file inclusion via variable'
+      - path: '^cmd/ccwb-codex-setup/'
+        linters:
+          - gosec
+        # Runs aws, codex, msiexec, icacls, powershell and whoami, found on PATH or at fixed install paths, with fixed arguments plus validated values.
+        text: 'G204: Subprocess launched with (variable|a potential tainted input or cmd arguments)'
       - path: '^policy/policy_test\.go$'
         linters:
           - gosec

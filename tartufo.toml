@@ -13,5 +13,6 @@ exclude-entropy-patterns = [
 ]
 
 exclude-signatures = [
-    # {signature = "hash value", reason = "false positive of high entropy in <***>"},
+    {signature = "c639409a63bdcb05792ea9dbfdfc9cf8034f0007408d235ba97d4103d5b4654a", reason = 'Public eclipse-temurin base-image digest pinned in signing/Dockerfile and verified by the container build'},
+    {signature = "930c6fceef9ae6bdef1faa5485d1dc34f0369309e895fa5580893df12da6d563", reason = 'Public jsign 7.5 SHA-256 pinned in signing/Dockerfile and verified against the downloaded jar'},
 ]

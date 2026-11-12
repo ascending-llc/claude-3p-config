@@ -46,6 +46,10 @@ jobs:
       - name: Lint
         run: make lint
 
+      # Build the native hook before asking it to check Windows source files.
+      - name: Lint Windows
+        run: GOOS=windows make lint
+
   # The plutil -lint check of the generated .mobileconfig only runs on macOS.
   macos:
     runs-on: macos-latest
@@ -60,3 +64,19 @@ jobs:
 
       - name: Run unit test
         run: make test
+
+  windows:
+    runs-on: windows-latest
+    env:
+      CCWB_REQUIRE_ELEVATED_TESTS: "1"
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "^1.24.1"
+
+      - name: Run unit test
+        run: go test ./...
